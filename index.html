@@ -198,20 +198,16 @@ canvas.pan{cursor:grab}
     <div class="card fold">
       <h2 id="h-export">4 · Export</h2>
       <div class="body">
-        <label class="f" id="l-exwhat">Which surface</label>
-        <select id="exWhat">
-          <option value="fin" selected>Finished surface</option>
-          <option value="sub">Subgrade — bulk earthworks</option>
-        </select>
         <label class="f" id="l-exres">Design surface spacing</label>
         <select id="exRes">
-          <option value="1">1 m — dense</option><option value="2" selected>2 m</option>
-          <option value="5">5 m — light</option>
+          <option value="0.5">0.5 m — heavy</option>
+          <option value="1" selected>1 m — matches the volumes here</option>
+          <option value="2">2 m</option><option value="5">5 m — light</option>
         </select>
-        <button class="wide" id="exXML">LandXML design surface</button>
-        <button class="wide" id="exDXF">DXF — outlines, levels, contours, cut/fill</button>
+        <button class="wide" id="exXML">LandXML — stripped, subgrade and finished</button>
+        <button class="wide" id="exDXF">DXF — outlines, levels and contours</button>
         <button class="wide" id="exDev">⬇ Dev: export everything as data</button>
-        <p class="hint" id="exHint">The DXF carries pad outlines with corner levels, design contours, the cut and fill map and a legend — each on its own layer.</p>
+        <p class="hint" id="exHint">The DXF carries pad outlines with corner levels, design contours and a legend, each on its own layer. Export the surfaces at 1 m if you want another tool to reproduce the volumes shown here — 2 m loses about 4%.</p>
       </div>
     </div>
 
@@ -419,8 +415,8 @@ const TR={
 "Design surface spacing":["Espaçamento da superfície de projeto","Pas de la surface de projet","Espaciado de la superficie de proyecto"],
 "1 m — dense":["1 m — densa","1 m — dense","1 m — densa"],
 "5 m — light":["5 m — leve","5 m — légère","5 m — ligera"],
-"LandXML design surface":["Superfície de projeto LandXML","Surface de projet LandXML","Superficie de proyecto LandXML"],
-"DXF — outlines, levels, contours, cut/fill":["DXF — contornos, cotas, curvas, escavação/aterro","DXF — contours, niveaux, courbes, déblai/remblai","DXF — contornos, cotas, curvas, desmonte/relleno"],
+"LandXML — stripped, subgrade and finished":["LandXML — decapado, sub-base e acabado","LandXML — décapé, sous-couche et fini","LandXML — decapado, subrasante y acabado"],
+"DXF — outlines, levels and contours":["DXF — contornos, cotas e curvas","DXF — contours, niveaux et courbes","DXF — contornos, cotas y curvas"],
 "The DXF carries pad outlines with corner levels, the daylight line, design contours, the cut and fill map and a legend — each on its own layer.":["O DXF leva os contornos das plataformas com as cotas dos cantos, a linha de encontro com o terreno, as curvas de projeto, o mapa de escavação e aterro e uma legenda — cada um na sua camada.","Le DXF contient les contours des plateformes avec les niveaux aux sommets, la ligne de raccordement au terrain, les courbes de projet, la carte déblai/remblai et une légende — chacun sur son calque.","El DXF lleva los contornos de las plataformas con las cotas de las esquinas, la línea de encuentro con el terreno, las curvas de proyecto, el mapa de desmonte y relleno y una leyenda — cada uno en su capa."],
 "Plan":["Planta","Plan","Planta"],
 "3D":["3D","3D","3D"],
@@ -910,6 +906,29 @@ function chainSegs(segs){
     out.push(line);
   }
   return out;
+}
+/** Douglas–Peucker: contours come off the grid with a vertex every cell, which
+ *  is far more than a drawing needs. Thin them without moving the line. */
+function simplify(line,tol){
+  if(line.length<3)return line;
+  const keep=new Uint8Array(line.length);
+  keep[0]=keep[line.length-1]=1;
+  const stack=[[0,line.length-1]];
+  while(stack.length){
+    const [a,b]=stack.pop();
+    if(b-a<2)continue;
+    const A=line[a],B=line[b];
+    const dx=B.x-A.x,dy=B.y-A.y,L=Math.hypot(dx,dy);
+    let worst=-1,wi=-1;
+    for(let i=a+1;i<b;i++){
+      const P=line[i];
+      const d=L<1e-9?Math.hypot(P.x-A.x,P.y-A.y)
+                    :Math.abs(dy*P.x-dx*P.y+B.x*A.y-B.y*A.x)/L;
+      if(d>worst){worst=d;wi=i;}
+    }
+    if(worst>tol){keep[wi]=1;stack.push([a,wi],[wi,b]);}
+  }
+  return line.filter((_,i)=>keep[i]);
 }
 function finishIso(map,iv){
   const out=[];
@@ -1851,45 +1870,52 @@ function save(name,text,mime){
   a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
 }
 const safe=s=>String(s).replace(/[^A-Z0-9_-]/gi,'_');
+/** All three surfaces the earthworks are argued from, in one LandXML: the
+ *  stripped ground the works sit on, the subgrade they are dug to, and the
+ *  finished design on top. Volume Solver can then compare any pair of them. */
 function exportXML(){
   if(!S.cache)return;
-  const C=S.cache, res=+($('exRes')||{value:2}).value||2, st=Math.max(1,Math.round(res/C.cell));
-  const which=($('exWhat')||{value:'fin'}).value, SRC=which==='sub'?S.fgBulk:S.fgFin;
-  const id=new Int32Array(C.nx*C.ny).fill(-1), P=[];
-  for(let j=0;j<C.ny;j+=st)for(let i=0;i<C.nx;i+=st){
-    id[j*C.nx+i]=P.length;
-    P.push([C.y0+j*C.cell, C.x0+i*C.cell, SRC[j*C.nx+i]]);
-  }
-  const F=[];
-  for(let j=0;j+st<C.ny;j+=st)for(let i=0;i+st<C.nx;i+=st){
-    const a=id[j*C.nx+i],b=id[j*C.nx+i+st],c=id[(j+st)*C.nx+i+st],d=id[(j+st)*C.nx+i];
-    if(a>=0&&b>=0&&c>=0)F.push([a+1,b+1,c+1]);
-    if(a>=0&&c>=0&&d>=0)F.push([a+1,c+1,d+1]);
-  }
+  const C=S.cache, res=+(($('exRes')||{}).value||2), st=Math.max(1,Math.round(res/C.cell));
   const dt=new Date().toISOString();
   let x='<?xml version="1.0"?>\n<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2" date="'
     +dt.slice(0,10)+'" time="'+dt.slice(11,19)+'">\n'
     +'<Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter"/></Units>\n'
-    +'<Application name="Grading Solver" version="1.0"/>\n'
-    +'<Surfaces><Surface name="'+S.egName+(which==='sub'?' subgrade':' design')+'"><Definition surfType="TIN">\n<Pnts>\n';
-  P.forEach((p,i)=>x+='<P id="'+(i+1)+'">'+p[0].toFixed(4)+' '+p[1].toFixed(4)+' '+p[2].toFixed(4)+'</P>\n');
-  x+='</Pnts>\n<Faces>\n';
-  for(const f of F)x+='<F>'+f[0]+' '+f[1]+' '+f[2]+'</F>\n';
-  x+='</Faces>\n</Definition></Surface></Surfaces>\n</LandXML>\n';
-  save(safe(S.egName)+(which==='sub'?'-subgrade':'-design')+'.xml',x,'application/xml');
-  note('LandXML written — '+P.length+' points, '+F.length+' triangles');
+    +'<Application name="Grading Solver" version="1.0"/>\n<Surfaces>\n';
+  let totP=0,totF=0;
+  const emit=(name,SRC)=>{
+    const id=new Int32Array(C.nx*C.ny).fill(-1);
+    let n=0;
+    let pts='',fac='';
+    for(let j=0;j<C.ny;j+=st)for(let i=0;i<C.nx;i+=st){
+      id[j*C.nx+i]=++n;
+      pts+='<P id="'+n+'">'+(C.y0+j*C.cell).toFixed(4)+' '+(C.x0+i*C.cell).toFixed(4)+' '+SRC[j*C.nx+i].toFixed(4)+'</P>\n';
+    }
+    let nf=0;
+    for(let j=0;j+st<C.ny;j+=st)for(let i=0;i+st<C.nx;i+=st){
+      const a=id[j*C.nx+i],b=id[j*C.nx+i+st],c=id[(j+st)*C.nx+i+st],d=id[(j+st)*C.nx+i];
+      if(a>0&&b>0&&c>0){fac+='<F>'+a+' '+b+' '+c+'</F>\n';nf++;}
+      if(a>0&&c>0&&d>0){fac+='<F>'+a+' '+c+' '+d+'</F>\n';nf++;}
+    }
+    totP+=n;totF+=nf;
+    x+='<Surface name="'+name+'"><Definition surfType="TIN">\n<Pnts>\n'+pts+'</Pnts>\n<Faces>\n'+fac+'</Faces>\n</Definition></Surface>\n';
+  };
+  emit(S.egName+' - EG stripped', S.egStrip);
+  emit(S.egName+' - subgrade',    S.fgBulk);
+  emit(S.egName+' - finished',    S.fgFin);
+  x+='</Surfaces>\n</LandXML>\n';
+  save(safe(S.egName)+'-surfaces.xml',x,'application/xml');
+  note('LandXML written — 3 surfaces, '+totP.toLocaleString()+' points, '+totF.toLocaleString()+' triangles');
 }
 /** Dev: the whole working state, so it can be looked at offline. */
 function exportDev(){
   const C=S.cache;
   const d={
-    meta:{tool:'grading-solver',version:'gs-r2',when:new Date().toISOString()},
+    meta:{tool:'grading-solver',version:'gs-r3',when:new Date().toISOString()},
     site:{name:S.egName,nx:S.eg.nx,ny:S.eg.ny,cell:S.eg.cell,x0:S.eg.x0,y0:S.eg.y0,
           z:Array.from(S.eg.z,v=>+v.toFixed(3))},
-    pads:S.pads.map(p=>({name:p.name,cx:+p.cx.toFixed(3),cy:+p.cy.toFixed(3),
+    pads:S.pads.map(p=>({name:p.name,col:p.col,cx:+p.cx.toFixed(3),cy:+p.cy.toFixed(3),
       fall:padFall(p),area:+padArea(p).toFixed(1),depth:p.depth||0,
       batterCut:p.bCut??S.bCut,batterFill:p.bFill??S.bFill,
-      col:p.col,
       pts:p.pts.map(q=>({x:+q.x.toFixed(3),y:+q.y.toFixed(3),z:+q.z.toFixed(3),
         eg:+egAt(q.x,q.y).toFixed(3)})),
       grades:p.pts.map((_,i)=>+edgeGrade(p,i).toFixed(3))})),
@@ -1908,45 +1934,27 @@ function exportDXF(){
   if(!S.cache)return;
   const C=S.cache, o=[], G=(c,v)=>{o.push(c,v)};
   const layers=[['PAD-OUTLINE',2],['PAD-LEVELS',3],['DESIGN-CONTOUR',8],
-    ['DESIGN-CONTOUR-INDEX',7],['CUTFILL',1],['LEGEND',7]];
+    ['DESIGN-CONTOUR-INDEX',7],['LEGEND',7]];
   G(0,'SECTION');G(2,'TABLES');G(0,'TABLE');G(2,'LAYER');G(70,layers.length);
   for(const [n,c] of layers){G(0,'LAYER');G(2,n);G(70,'0');G(62,c);G(6,'CONTINUOUS');}
   G(0,'ENDTAB');G(0,'ENDSEC');G(0,'SECTION');G(2,'ENTITIES');
-  // cut / fill blocks, merged along rows to keep the file small
-  const step=Math.max(1,Math.round(1/C.cell)), cs=step*C.cell;
-  const band=d=>Math.abs(d)<=DEAD?null:(d<0?Math.min(3,Math.ceil(-d/1)):-Math.min(3,Math.ceil(d/1)));
-  const bcol=b=>b>0?[0,11,12,13][b]||12:[0,90,92,94][-b]||92;
-  let solids=0;
-  for(let j=0;j<C.ny-step;j+=step){
-    let run=-99,i0=0;
-    const flush=(iEnd)=>{
-      if(run===-99||run===null)return;
-      const x0=C.x0+i0*C.cell, x1=C.x0+(iEnd+step)*C.cell;
-      const y0=C.y0+j*C.cell, y1=y0+cs;
-      G(0,'SOLID');G(8,'CUTFILL');G(62,bcol(run));
-      G(10,x0.toFixed(3));G(20,y0.toFixed(3));G(30,'0');
-      G(11,x1.toFixed(3));G(21,y0.toFixed(3));G(31,'0');
-      G(12,x0.toFixed(3));G(22,y1.toFixed(3));G(32,'0');
-      G(13,x1.toFixed(3));G(23,y1.toFixed(3));G(33,'0');
-      solids++;
-    };
-    for(let i=0;i<C.nx-step;i+=step){
-      const k=j*C.nx+i, b=band(S.fg[k]-C.eg[k]);
-      if(b!==run){flush(i-step);run=b;i0=i;}
-    }
-    flush(C.nx-1-step);
-  }
   // design contours, joined into polylines at their own elevation
   let cpl=0;
   if(S.cont)for(const c of S.cont){
     const lay=c.major?'DESIGN-CONTOUR-INDEX':'DESIGN-CONTOUR';
-    for(const line of chainSegs(c.segs)){
-      if(line.length<2)continue;
+    for(const raw of chainSegs(c.segs)){
+      if(raw.length<2)continue;
+      const line=simplify(raw,S.cell*0.12);
       const closed=Math.hypot(line[0].x-line[line.length-1].x,line[0].y-line[line.length-1].y)<1e-6;
       const pts=closed?line.slice(0,-1):line;
       if(pts.length<2)continue;
-      G(0,'LWPOLYLINE');G(8,lay);G(90,pts.length);G(70,closed?'1':'0');G(38,c.z.toFixed(3));
-      for(const q of pts){G(10,q.x.toFixed(3));G(20,q.y.toFixed(3));}
+      G(0,'POLYLINE');G(8,lay);G(66,'1');G(70,closed?'9':'8');   // 8 = 3D polyline
+      G(10,'0');G(20,'0');G(30,'0');
+      for(const q of pts){
+        G(0,'VERTEX');G(8,lay);G(70,'32');
+        G(10,q.x.toFixed(3));G(20,q.y.toFixed(3));G(30,c.z.toFixed(3));
+      }
+      G(0,'SEQEND');G(8,lay);
       cpl++;
     }
   }
@@ -1978,9 +1986,8 @@ function exportDXF(){
   const txt=(t,h)=>{G(0,'TEXT');G(8,'LEGEND');G(10,lx.toFixed(3));G(20,ly.toFixed(3));G(30,'0');
     G(40,(h||th).toFixed(3));G(1,t);ly-=th*2;};
   txt('GRADING — '+S.egName,th*1.6);
-  txt('Cut '+Math.round(S.vol.cut)+' m3');
-  txt('Fill '+Math.round(S.vol.fill)+' m3');
-  txt('Net '+(S.vol.net>=0?'import ':'to waste ')+Math.abs(Math.round(S.vol.net))+' m3');
+  txt('Bulk cut '+Math.round(S.vol.cut)+' m3   fill '+Math.round(S.vol.fill)+' m3');
+  txt('Topsoil '+Math.round(S.volStrip)+' m3 over the works, strip '+S.strip.toFixed(2)+' m');
 
   for(const p of S.pads)if(p.pts.length>2)
     txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+Math.round(padArea(p))+' m2'+
@@ -1988,7 +1995,7 @@ function exportDXF(){
   G(0,'ENDSEC');G(0,'EOF');
   let out='';for(let i=0;i<o.length;i+=2)out+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
   save(safe(S.egName)+'-grading.dxf',out,'application/dxf');
-  note('DXF written — '+solids+' cut/fill blocks, '+cpl+' contour polylines, '+S.pads.length+' pads');
+  note('DXF written — '+cpl+' contour polylines, '+S.pads.length+' pads');
 }
 
 /* ─────────────── set up ─────────────── */
