@@ -1,0 +1,1950 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Grading Solver — pads, falls and batters</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:#0f1319;color:#cfd8e3;
+  font:13px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow:hidden}
+body{display:flex;flex-direction:column}
+header{flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:6px 12px;
+  background:linear-gradient(180deg,#1b2430,#151c25);border-bottom:1px solid #080b0f;
+  flex-wrap:nowrap;overflow:hidden;white-space:nowrap}
+header>*{flex:0 0 auto}
+h1{margin:0;font:600 15px/1 system-ui;color:#e8eef6;flex:0 0 auto}
+h1 b{color:#f2b01e;font-weight:600}
+.sub{color:#78828f;font-size:11.5px;flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.spacer{flex:1}
+.tag{background:#141a22;border:1px solid #2b3644;border-radius:6px;padding:3px 8px;font-size:11.5px;color:#9fb0c3}
+select.lang{background:#141a22;color:#cfd8e3;border:1px solid #2b3644;border-radius:6px;
+  padding:3px 7px;font:inherit;font-size:11.5px;cursor:pointer}
+#app{display:flex;flex:1 1 auto;min-height:0}
+#panel{width:300px;overflow-y:auto;overscroll-behavior:contain;background:#141a21;
+  border-right:1px solid #080b0f;flex:0 0 300px;min-height:0}
+.card{border-bottom:1px solid #0d1218}
+.card>h2{margin:0;padding:9px 12px;font:600 10.5px/1 system-ui;letter-spacing:.09em;
+  text-transform:uppercase;color:#f2b01e;cursor:default;display:flex;align-items:center;gap:6px}
+.card.fold>h2{cursor:pointer}
+.card.fold>h2:after{content:'▾';margin-left:auto;color:#5d6773;font-size:11px}
+.card.fold.shut>h2:after{content:'▸'}
+.card.fold.shut>.body{display:none}
+.body{padding:0 12px 11px}
+.hint{margin:6px 0 0;font-size:11px;color:#78828f;line-height:1.45}
+button{background:linear-gradient(180deg,#2b3542,#222b36);color:#cfd8e3;border:1px solid #0b0f14;
+  border-top-color:#39434f;border-radius:5px;padding:6px 8px;font:inherit;font-size:11.5px;cursor:pointer}
+button:hover{filter:brightness(1.15)}
+button:active{transform:translateY(1px)}
+button.on{background:linear-gradient(180deg,#f0b429,#d99413);color:#241b00;border-top-color:#ffd97a}
+button.wide{width:100%;margin-top:6px}
+button.go{background:linear-gradient(180deg,#2f7d4f,#22603c);border-top-color:#3f9a63;color:#dff5e6}
+.row{display:flex;gap:5px}
+.row>*{flex:1}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:6px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px}
+select,input[type=number],input[type=text]{background:#0d1218;color:#cfd8e3;border:1px solid #29323d;
+  border-radius:5px;padding:4px 6px;font:inherit;font-size:11.5px;width:100%}
+label.f{display:block;margin:9px 0 3px;font-size:10.5px;color:#828d9b;text-transform:uppercase;letter-spacing:.06em}
+.drop{border:1.5px dashed #303b48;border-radius:7px;padding:12px 8px;text-align:center;
+  color:#78828f;font-size:11.5px;cursor:pointer}
+.drop:hover{border-color:#f2b01e;color:#cfd8e3}
+.pad{background:#101720;border:1px solid #212b36;border-radius:6px;padding:7px;margin-bottom:6px;cursor:pointer}
+.pad.on{border-color:#f2b01e;background:#1a1a12}
+.pad .nm{display:flex;align-items:center;gap:6px;font-size:12px;color:#e8eef6}
+.pad .sw{width:11px;height:11px;border-radius:3px;flex:none;border:1px solid #0008}
+.pad .meta{font-size:10.5px;color:#78828f;margin-top:2px}
+.kv{display:flex;justify-content:space-between;padding:2px 0;font-size:12px}
+.kv span:last-child{font-variant-numeric:tabular-nums;color:#e8eef6}
+.chk{display:flex;justify-content:space-between;font-size:11px;padding:2px 0;
+  font-family:ui-monospace,monospace}
+.chk.ok span:first-child{color:#7bbf5e}.chk.no span:first-child{color:#e0866f}
+.chk span:last-child{color:#828d9b}
+main{flex:1 1 auto;position:relative;background:#0a0e12;min-width:0;min-height:0}
+canvas{display:block;width:100%;height:100%;cursor:crosshair}
+canvas.pan{cursor:grab}
+.tabs{position:absolute;top:9px;left:9px;display:flex;gap:4px;z-index:4;flex-wrap:wrap;max-width:calc(100% - 220px)}
+.tgap{width:9px}
+.tabs button{background:#0f141bee;border-color:#26303b}
+.bar{position:absolute;top:9px;right:9px;background:#0d1218ee;border:1px solid #26303b;
+  border-radius:7px;padding:8px 11px;min-width:172px;max-width:216px;z-index:4}
+.bar .kv{font-size:12.5px}
+.bar .big span:last-child{font-size:15px;font-weight:600;color:#f2b01e}
+.bar hr{border:0;border-top:1px solid #26303b;margin:6px 0}
+.bhead{font:600 9.5px/1.35 system-ui;white-space:normal;letter-spacing:.07em;text-transform:uppercase;color:#7d8794;margin-bottom:6px}
+.foot{position:absolute;bottom:9px;left:9px;z-index:7;background:#0d1218dd;border:1px solid #26303b;
+  border-radius:6px;padding:5px 9px;font-size:11px;color:#9fb0c3;pointer-events:none}
+.note{position:absolute;bottom:9px;right:9px;z-index:7;background:#0d1218ee;border:1px solid #26303b;
+  border-radius:6px;padding:5px 10px;font-size:11.5px;color:#cfd8e3;max-width:330px}
+.note.warn{border-color:#7d4636;color:#f0a68f}
+.cut{color:#e8836b}.fill{color:#7bbf5e}
+.sect{position:absolute;left:0;right:0;bottom:0;height:216px;background:#0d1218f2;
+  border-top:1px solid #26303b;z-index:6;display:flex;flex-direction:column}
+.shead{display:flex;align-items:center;gap:11px;padding:5px 10px;border-bottom:1px solid #1a222c;font-size:11.5px}
+.shead b{color:#f2b01e;font:600 10.5px/1 system-ui;letter-spacing:.08em;text-transform:uppercase}
+.sc{display:flex;align-items:center;gap:4px;cursor:pointer;color:#9fb0c3}
+#sectInfo{color:#828d9b;font-variant-numeric:tabular-nums}
+#scv{flex:1;width:100%;cursor:default}
+.hide{display:none}
+</style>
+</head>
+<body>
+<header>
+  <h1>Grading <b>Solver</b></h1>
+  <span class="sub" id="tagline">pads, falls and batters for light civils</span>
+  <span class="spacer"></span>
+  <select id="lang" class="lang">
+    <option value="en">English</option><option value="pt">Português (PT)</option>
+    <option value="fr">Français</option><option value="es">Español</option>
+  </select>
+  <button id="devTop" title="Export everything as data">⬇ Dev data</button>
+  <span class="tag" id="site">demo site</span>
+</header>
+
+<div id="app">
+  <aside id="panel">
+
+    <div class="card">
+      <h2 id="h-site">1 · Site</h2>
+      <div class="body">
+        <div class="drop" id="drop"><span id="dropTxt">Drop a LandXML survey or a DXF of outlines here</span></div>
+        <input type="file" id="file" accept=".xml,.landxml,.dxf" class="hide">
+        <button class="wide" id="demo">Back to the demo site</button>
+        <p class="hint" id="groundHint">A survey sets the ground. A DXF of closed polylines comes in as pads. Without either you get a demo site.</p>
+      </div>
+    </div>
+
+    <div class="card fold">
+      <h2 id="h-set">2 · Settings</h2>
+      <div class="body">
+        <label class="f" id="l-strip">Topsoil strip</label>
+        <select id="tStrip">
+          <option value="0">none</option><option value="0.1">0.10 m</option>
+          <option value="0.15" selected>0.15 m</option><option value="0.2">0.20 m</option>
+          <option value="0.25">0.25 m</option><option value="0.3">0.30 m</option>
+        </select>
+        <div class="g2">
+          <div><label class="f" id="l-bcut">Cut batter 1V :</label><input type="number" id="bCut" step="0.5" min="0.5"></div>
+          <div><label class="f" id="l-bfill">Fill batter 1V :</label><input type="number" id="bFill" step="0.5" min="0.5"></div>
+        </div>
+        <div class="g2">
+          <div><label class="f" id="l-cint">Contour interval</label>
+            <select id="cInt">
+              <option value="0.1">0.10 m</option><option value="0.25" selected>0.25 m</option>
+              <option value="0.5">0.50 m</option><option value="1">1.00 m</option>
+            </select></div>
+          <div><label class="f" id="l-gsp">Site grid</label>
+            <select id="gridSp">
+              <option value="5">5 m</option><option value="10" selected>10 m</option>
+              <option value="20">20 m</option><option value="25">25 m</option>
+            </select></div>
+        </div>
+        <div class="g2">
+          <div><label class="f" id="l-snap">Snap corners</label>
+            <select id="snap">
+              <option value="0">no snap</option><option value="0.5">0.50 m</option>
+              <option value="1" selected>1 m</option><option value="5">5 m</option>
+            </select></div>
+          <div><label class="f" id="l-lw">Link width</label><input type="number" id="lW" step="0.1" min="0.5" value="1.8"></div>
+        </div>
+        <label class="f" id="l-grid">Design grid</label>
+        <select id="gCell">
+          <option value="0.2">0.20 m</option><option value="0.25">0.25 m</option>
+          <option value="0.4" selected>0.40 m</option><option value="0.5">0.50 m</option>
+          <option value="1">1.00 m</option>
+        </select>
+        <p class="hint" id="gridHint">Pad edges land on the nearest half cell, so the box volume runs a little high on a coarse grid — about 4% at 1 m, 1% at 0.25 m.</p>
+        <label class="f" id="l-vex">3D vertical exaggeration</label>
+        <select id="vex">
+          <option value="1">1 ×</option><option value="1.6" selected>1.6 ×</option>
+          <option value="3">3 ×</option><option value="6">6 ×</option>
+        </select>
+        <label class="chk"><input type="checkbox" id="wire">3D wireframe</label>
+        <label class="chk"><input type="checkbox" id="shade" checked>3D shading</label>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 id="h-grade">3 · Grading</h2>
+      <div class="body">
+        <div id="padlist"></div>
+        <div class="row"><button id="pAdd">＋ New pad</button><button id="pLink">＋ Link pads</button></div>
+        <div class="g2">
+          <div><label class="f" id="l-nw">New pad width</label><input type="number" id="nW" step="1" min="1" value="40"></div>
+          <div><label class="f" id="l-nl">Length</label><input type="number" id="nL" step="1" min="1" value="28"></div>
+        </div>
+        <button class="wide" id="pDel">Delete pad</button>
+        <div id="selEditor"></div>
+        <label class="f" id="l-edit">Tools</label>
+        <div class="g4">
+          <button id="t-select" class="on">◎</button><button id="t-add">⚑</button>
+          <button id="t-move">✥</button><button id="t-del">✕</button>
+          <button id="t-sect" style="grid-column:span 2">✂ Section line</button>
+          <button id="fitview" style="grid-column:span 2">⤢ Zoom to fit</button>
+        </div>
+        <p class="hint" id="toolhint">Click a corner, a string or a pad to work on it.</p>
+        <div class="row" style="margin-top:5px">
+          <button id="uUndo">↶ Undo</button><button id="uRedo">↷ Redo</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card fold">
+      <h2 id="h-export">4 · Export</h2>
+      <div class="body">
+        <label class="f" id="l-exwhat">Which surface</label>
+        <select id="exWhat">
+          <option value="fin" selected>Finished surface</option>
+          <option value="sub">Subgrade — bulk earthworks</option>
+        </select>
+        <label class="f" id="l-exres">Design surface spacing</label>
+        <select id="exRes">
+          <option value="1">1 m — dense</option><option value="2" selected>2 m</option>
+          <option value="5">5 m — light</option>
+        </select>
+        <button class="wide" id="exXML">LandXML design surface</button>
+        <button class="wide" id="exDXF">DXF — outlines, levels, contours, cut/fill</button>
+        <button class="wide" id="exDev">⬇ Dev: export everything as data</button>
+        <p class="hint" id="exHint">The DXF carries pad outlines with corner levels, design contours, the cut and fill map and a legend — each on its own layer.</p>
+      </div>
+    </div>
+
+  </aside>
+
+  <main>
+    <div class="tabs">
+      <button id="vPlan" class="on">Plan</button>
+      <button id="v3d">3D</button>
+      <span class="tgap"></span>
+      <button id="vCF" class="on">Cut / fill</button>
+      <button id="vFill">Pad fill</button>
+      <button id="vFgC" class="on">FG cont</button>
+      <button id="vEgC">EG cont</button>
+      <button id="vGrid">Grid</button>
+    </div>
+    <div class="bar">
+      <div class="bhead" id="l-bhead">Bulk earthworks<br>stripped ground → subgrade</div>
+      <div class="kv"><span class="cut" id="l-cut">Cut</span><span id="vcut">—</span></div>
+      <div class="kv"><span class="fill" id="l-fill">Fill</span><span id="vfill">—</span></div>
+      <hr>
+      <div class="kv big"><span id="l-bal">Balance</span><span id="vnet">—</span></div>
+      <hr>
+      <div class="kv"><span id="l-strv">Topsoil · works</span><span id="vstrip">—</span></div>
+      <div class="kv"><span id="l-strv2">Topsoil · site</span><span id="vstripAll">—</span></div>
+    </div>
+    <canvas id="cv"></canvas>
+    <div class="sect hide" id="sect">
+      <div class="shead">
+        <b id="sectName">Section</b>
+        <label class="sc"><input type="checkbox" id="sFin" checked><span style="color:#ffd166">Finished</span></label>
+        <label class="sc"><input type="checkbox" id="sSub" checked><span style="color:#f2905c">Subgrade</span></label>
+        <label class="sc"><input type="checkbox" id="sEg" checked><span style="color:#9fb0c3">Ground</span></label>
+        <label class="sc"><input type="checkbox" id="sStrip" checked><span style="color:#6f8fa8">Stripped</span></label>
+        <span class="spacer"></span>
+        <span id="sectInfo"></span>
+        <button id="sectClose" class="sm">✕</button>
+      </div>
+      <canvas id="scv"></canvas>
+    </div>
+    <div class="foot" id="foot"></div>
+    <div class="note" id="note"></div>
+  </main>
+</div>
+
+<script>
+/* ══════════════════════════════════════════════════════════════════════
+   Grading Solver — light civils: set a pad down on the ground, give it a
+   level and a fall, batter it out to daylight, and read the earthworks.
+   Everything runs in this page. Nothing is uploaded anywhere.
+   ══════════════════════════════════════════════════════════════════════ */
+const $=id=>document.getElementById(id);
+
+/* ─────────────────────────── languages ─────────────────────────── */
+const TR={
+"pads, falls and batters for light civils":["plataformas, pendentes e taludes para obras ligeiras","plateformes, pentes et talus pour petits travaux","plataformas, pendientes y taludes para obra ligera"],
+"demo site":["terreno de demonstração","site de démonstration","terreno de demostración"],
+"Pads":["Plataformas","Plateformes","Plataformas"],
+"＋ New pad":["＋ Nova plataforma","＋ Nouvelle plateforme","＋ Nueva plataforma"],
+"Delete pad":["Apagar plataforma","Supprimer la plateforme","Borrar plataforma"],
+"Pad level":["Cota da plataforma","Niveau de la plateforme","Cota de la plataforma"],
+"Bulk earthworks":["Movimentação de terras","Terrassements","Movimiento de tierras"],
+"Topsoil":["Terra vegetal","Terre végétale","Tierra vegetal"],
+"Topsoil strip":["Decapagem de terra vegetal","Décapage de terre végétale","Decapado de tierra vegetal"],
+"none":["nenhuma","aucune","ninguna"],
+"Taken off wherever the design disturbs the ground. Bulk earthworks are measured from the stripped surface up to the subgrade.":["Retirada onde o projeto perturba o terreno. A movimentação de terras é medida da superfície decapada até à sub-base.","Enlevée là où le projet remanie le terrain. Les terrassements sont mesurés de la surface décapée jusqu'à la sous-couche.","Retirada donde el proyecto altera el terreno. El movimiento de tierras se mide desde la superficie decapada hasta la subrasante."],
+"Finished":["Acabado","Fini","Acabado"],
+"New pad width":["Largura da nova plataforma","Largeur de la nouvelle plateforme","Ancho de la nueva plataforma"],
+"Length":["Comprimento","Longueur","Longitud"],
+"Link width":["Largura da ligação","Largeur de la liaison","Ancho del enlace"],
+"＋ Link pads":["＋ Ligar plataformas","＋ Relier les plateformes","＋ Unir plataformas"],
+"All corners":["Todos os cantos","Tous les sommets","Todas las esquinas"],
+"Sets every corner of this pad to one level — a flat pad.":["Coloca todos os cantos desta plataforma na mesma cota — plataforma plana.","Met tous les sommets de cette plateforme au même niveau — plateforme plane.","Pone todas las esquinas de esta plataforma a la misma cota — plataforma plana."],
+"Construction depth":["Espessura de construção","Épaisseur de construction","Espesor de construcción"],
+"Bulk earthworks are taken to this depth below the finished surface.":["A movimentação de terras é levada a esta profundidade abaixo da superfície acabada.","Les terrassements sont menés à cette profondeur sous la surface finie.","El movimiento de tierras se lleva a esta profundidad bajo la superficie acabada."],
+"Which surface":["Que superfície","Quelle surface","Qué superficie"],
+"Finished surface":["Superfície acabada","Surface finie","Superficie acabada"],
+"Subgrade — bulk earthworks":["Sub-base — movimentação de terras","Sous-couche — terrassements","Subrasante — movimiento de tierras"],
+"subgrade ":["sub-base ","sous-couche ","subrasante "],
+"Click one pad, then the other":["Clique numa plataforma e depois na outra","Cliquez sur une plateforme puis sur l'autre","Haga clic en una plataforma y luego en la otra"],
+"Now click the other end of the link":["Agora clique na outra extremidade da ligação","Cliquez maintenant l'autre extrémité de la liaison","Ahora haga clic en el otro extremo del enlace"],
+"That link is too short":["Essa ligação é demasiado curta","Cette liaison est trop courte","Ese enlace es demasiado corto"],
+"Link made — ":["Ligação criada — ","Liaison créée — ","Enlace creado — "],
+"Now click where the corner should go":["Agora clique onde o canto deve ficar","Cliquez maintenant où le sommet doit aller","Ahora haga clic dónde debe ir la esquina"],
+"Now click where the pad should go":["Agora clique onde a plataforma deve ficar","Cliquez maintenant où la plateforme doit aller","Ahora haga clic dónde debe ir la plataforma"],
+"Click a corner, or inside a pad to move the whole pad":["Clique num canto, ou dentro de uma plataforma para a mover toda","Cliquez un sommet, ou dans une plateforme pour la déplacer entière","Haga clic en una esquina, o dentro de una plataforma para moverla entera"],
+"Click a corner to move it, or inside a pad to move the whole pad.":["Clique num canto para o mover, ou dentro de uma plataforma para a mover toda.","Cliquez un sommet pour le déplacer, ou dans une plateforme pour la déplacer entière.","Haga clic en una esquina para moverla, o dentro de una plataforma para moverla entera."],
+"Click one pad, then the other — a walkway is laid between them.":["Clique numa plataforma e depois na outra — é criado um passeio entre elas.","Cliquez sur une plateforme puis l'autre — un cheminement est créé entre elles.","Haga clic en una plataforma y luego en la otra — se traza un paso entre ellas."],
+"✂ Section line":["✂ Linha de perfil","✂ Ligne de profil","✂ Línea de perfil"],
+"Click two points to cut a section through the surfaces.":["Clique em dois pontos para cortar um perfil pelas superfícies.","Cliquez deux points pour couper un profil à travers les surfaces.","Haga clic en dos puntos para cortar un perfil por las superficies."],
+"Now click the far end of the section":["Agora clique na outra extremidade do perfil","Cliquez maintenant l'autre extrémité du profil","Ahora haga clic en el otro extremo del perfil"],
+"Section":["Perfil","Profil","Perfil"],
+"Section cut":["Perfil cortado","Profil coupé","Perfil cortado"],
+"Finished":["Acabado","Fini","Acabado"],
+"Subgrade":["Sub-base","Sous-couche","Subrasante"],
+"Ground":["Terreno","Terrain","Terreno"],
+"Stripped":["Decapado","Décapé","Decapado"],
+"Tick a surface to see it":["Marque uma superfície para a ver","Cochez une surface pour la voir","Marque una superficie para verla"],
+"Drape to pad":["Ajustar à plataforma","Caler sur la plateforme","Ajustar a la plataforma"],
+"Drape to ground":["Ajustar ao terreno","Caler sur le terrain","Ajustar al terreno"],
+"Add a stake at mid-string":["Colocar estaca a meio da linha","Poser un piquet au milieu de la ligne","Colocar estaca a media línea"],
+"Stake set on the string — it is now two strings":["Estaca colocada na linha — passou a duas linhas","Piquet posé sur la ligne — elle devient deux lignes","Estaca colocada en la línea — ahora son dos líneas"],
+"No pad meets that string":["Nenhuma plataforma encontra essa linha","Aucune plateforme ne rejoint cette ligne","Ninguna plataforma se encuentra con esa línea"],
+"Could not drape":["Não foi possível ajustar","Impossible de caler","No se pudo ajustar"],
+"String draped onto the ground":["Linha ajustada ao terreno","Ligne calée sur le terrain","Línea ajustada al terreno"],
+"String draped onto the pad it meets":["Linha ajustada à plataforma que encontra","Ligne calée sur la plateforme rencontrée","Línea ajustada a la plataforma que encuentra"],
+"Name and colour":["Nome e cor","Nom et couleur","Nombre y color"],
+"Corner":["Canto","Sommet","Esquina"],
+"level":["cota","niveau","cota"],
+"To ground":["Ao terreno","Au terrain","Al terreno"],
+"Ground here":["Terreno aqui","Terrain ici","Terreno aquí"],
+"fill":["aterro","remblai","relleno"],
+"cut":["escavação","déblai","desmonte"],
+"String":["Linha","Ligne","Línea"],
+"grade":["pendente","pente","pendiente"],
+"Set":["Aplicar","Appliquer","Aplicar"],
+"Setting the grade lifts or drops the far end of the string.":["Aplicar a pendente sobe ou desce a outra extremidade da linha.","Appliquer la pente monte ou descend l'autre extrémité de la ligne.","Aplicar la pendiente sube o baja el otro extremo de la línea."],
+"Length":["Comprimento","Longueur","Longitud"],
+"From":["De","De","De"],
+"To":["Para","Vers","A"],
+"Move the whole pad":["Mover toda a plataforma","Déplacer toute la plateforme","Mover toda la plataforma"],
+"Solves the level of this pad so the site cut equals its fill.":["Calcula a cota desta plataforma para que a escavação iguale o aterro.","Calcule le niveau de cette plateforme pour que le déblai égale le remblai.","Calcula la cota de esta plataforma para que el desmonte iguale el relleno."],
+"Overall fall":["Pendente geral","Pente générale","Pendiente general"],
+"Lay a plane over it":["Aplicar um plano","Appliquer un plan","Aplicar un plano"],
+"Apply plane":["Aplicar plano","Appliquer le plan","Aplicar plano"],
+"Add a pad to begin.":["Adicione uma plataforma para começar.","Ajoutez une plateforme pour commencer.","Añada una plataforma para empezar."],
+"Click a corner, a string or a pad to work on it.":["Clique num canto, numa linha ou numa plataforma para trabalhar nela.","Cliquez un sommet, une ligne ou une plateforme pour y travailler.","Haga clic en una esquina, una línea o una plataforma para trabajar en ella."],
+"corner":["canto","sommet","esquina"],
+"string":["linha","ligne","línea"],
+"pad":["plataforma","plateforme","plataforma"],
+"Nothing there":["Nada aí","Rien ici","Nada ahí"],
+"No closed polylines found in that DXF":["Nenhuma polilinha fechada encontrada nesse DXF","Aucune polyligne fermée trouvée dans ce DXF","No se encontraron polilíneas cerradas en ese DXF"],
+" outline(s) imported from DXF":[" contorno(s) importado(s) do DXF"," contour(s) importé(s) du DXF"," contorno(s) importado(s) del DXF"],
+"State exported — send me the file":["Estado exportado — envie-me o ficheiro","État exporté — envoyez-moi le fichier","Estado exportado — envíeme el archivo"],
+"A pad needs three corners":["Uma plataforma precisa de três cantos","Une plateforme nécessite trois sommets","Una plataforma necesita tres esquinas"],
+"Balanced — pad moved ":["Equilibrado — plataforma movida ","Équilibré — plateforme déplacée ","Equilibrado — plataforma movida "],
+"up ":["para cima ","vers le haut ","hacia arriba "],
+"down ":["para baixo ","vers le bas ","hacia abajo "],
+"Balance the site":["Equilibrar o terreno","Équilibrer le site","Equilibrar el terreno"],
+"Solves the level of the pad above so the site cut equals its fill.":["Calcula a cota da plataforma acima para que a escavação iguale o aterro.","Calcule le niveau de la plateforme ci-dessus pour que le déblai égale le remblai.","Calcula la cota de la plataforma de arriba para que el desmonte iguale el relleno."],
+"Fall %":["Pendente %","Pente %","Pendiente %"],
+"Falls to":["Pende para","Pente vers","Pendiente hacia"],
+"North":["Norte","Nord","Norte"],"North-east":["Nordeste","Nord-est","Noreste"],
+"East":["Este","Est","Este"],"South-east":["Sudeste","Sud-est","Sureste"],
+"South":["Sul","Sud","Sur"],"South-west":["Sudoeste","Sud-ouest","Suroeste"],
+"West":["Oeste","Ouest","Oeste"],"North-west":["Noroeste","Nord-ouest","Noroeste"],
+"Use — sets the grade limits":["Utilização — define os limites de pendente","Usage — fixe les limites de pente","Uso — fija los límites de pendiente"],
+"Building pad · 0.5 – 2.0%":["Plataforma de edifício · 0,5 – 2,0%","Plateforme de bâtiment · 0,5 – 2,0%","Plataforma de edificio · 0,5 – 2,0%"],
+"Carpark · 1.0 – 2.5%":["Estacionamento · 1,0 – 2,5%","Parking · 1,0 – 2,5%","Aparcamiento · 1,0 – 2,5%"],
+"Accessible parking · 0.5 – 2.0%":["Estacionamento acessível · 0,5 – 2,0%","Stationnement accessible · 0,5 – 2,0%","Aparcamiento accesible · 0,5 – 2,0%"],
+"Yard / hardstand · 1.0 – 5.0%":["Pátio / plataforma · 1,0 – 5,0%","Cour / aire stabilisée · 1,0 – 5,0%","Patio / explanada · 1,0 – 5,0%"],
+"Edit the outline":["Editar o contorno","Modifier le contour","Editar el contorno"],
+"Click a pad to work on it. Drag the view to pan.":["Clique numa plataforma para trabalhar nela. Arraste para deslocar a vista.","Cliquez sur une plateforme pour y travailler. Glissez pour déplacer la vue.","Haga clic en una plataforma para trabajar en ella. Arrastre para desplazar la vista."],
+"Click to drop a corner. Corners snap to the grid.":["Clique para colocar um canto. Os cantos ajustam-se à grelha.","Cliquez pour poser un sommet. Les sommets s'accrochent à la grille.","Haga clic para colocar una esquina. Las esquinas se ajustan a la malla."],
+"Click a corner, then click where it should go.":["Clique num canto e depois onde ele deve ficar.","Cliquez un sommet, puis l'endroit où il doit aller.","Haga clic en una esquina y luego dónde debe ir."],
+"Click a corner to pull it out.":["Clique num canto para o retirar.","Cliquez un sommet pour le retirer.","Haga clic en una esquina para quitarla."],
+"↶ Undo":["↶ Anular","↶ Annuler","↶ Deshacer"],
+"↷ Redo":["↷ Refazer","↷ Rétablir","↷ Rehacer"],
+"Checks":["Verificações","Contrôles","Comprobaciones"],
+"Ground":["Terreno","Terrain","Terreno"],
+"Drop a LandXML survey or a DXF of outlines here":["Largue aqui um levantamento LandXML ou um DXF de contornos","Déposez ici un levé LandXML ou un DXF de contours","Suelte aquí un levantamiento LandXML o un DXF de contornos"],
+"Back to the demo site":["Voltar ao terreno de demonstração","Revenir au site de démonstration","Volver al terreno de demostración"],
+"Without a survey the tool works on a demo site, so you can see it running straight away.":["Sem levantamento a ferramenta usa um terreno de demonstração, para a ver a funcionar de imediato.","Sans levé, l'outil utilise un site de démonstration, pour le voir fonctionner tout de suite.","Sin levantamiento la herramienta usa un terreno de demostración, para verla funcionar de inmediato."],
+"Batters & grid":["Taludes e grelha","Talus et grille","Taludes y malla"],
+"Cut batter 1V :":["Talude de escavação 1V :","Talus de déblai 1V :","Talud de desmonte 1V :"],
+"Fill batter 1V :":["Talude de aterro 1V :","Talus de remblai 1V :","Talud de relleno 1V :"],
+"Pad edges land on the nearest half cell. On a 2,000 m² pad with a construction depth the box volume runs about 4% high at 1 m, 2% at 0.5 m and 1% at 0.25 m — go finer when the box matters, at some cost in responsiveness.":["Os bordos das plataformas caem na meia célula mais próxima, pelo que com espessura de construção convém uma grelha fina: numa plataforma de 2.000 m² o volume da caixa erra cerca de 1% a 0,25 m e 4% a 1 m.","Les bords des plateformes tombent sur la demi-cellule la plus proche : avec une épaisseur de construction, une grille fine est préférable — sur une plateforme de 2 000 m², le volume de la caisse est faux d'environ 1% à 0,25 m et 4% à 1 m.","Los bordes de las plataformas caen en la media celda más cercana, así que con espesor de construcción conviene una malla fina: en una plataforma de 2.000 m² el volumen de la caja se desvía cerca del 1% a 0,25 m y 4% a 1 m."],
+"Design grid":["Grelha de cálculo","Grille de calcul","Malla de cálculo"],
+"Design contours":["Curvas de projeto","Courbes de projet","Curvas de proyecto"],
+"Ground contours":["Curvas do terreno","Courbes du terrain","Curvas del terreno"],
+"FG cont":["Curvas FG","Courbes FG","Curvas FG"],
+"EG cont":["Curvas EG","Courbes EG","Curvas EG"],
+"Contour interval":["Intervalo de curvas","Équidistance","Equidistancia"],
+"3D vertical exaggeration":["Exagero vertical 3D","Exagération verticale 3D","Exageración vertical 3D"],
+"3D wireframe":["Malha 3D","Fil de fer 3D","Malla 3D"],
+"3D shading":["Sombreado 3D","Ombrage 3D","Sombreado 3D"],
+"1 · Site":["1 · Terreno","1 · Site","1 · Terreno"],
+"2 · Settings":["2 · Definições","2 · Réglages","2 · Ajustes"],
+"3 · Grading":["3 · Modelação","3 · Nivellement","3 · Nivelación"],
+"4 · Export":["4 · Exportar","4 · Exportation","4 · Exportar"],
+"Tools":["Ferramentas","Outils","Herramientas"],
+"Snap corners":["Ajustar cantos","Accrocher sommets","Ajustar esquinas"],
+"⤢ Zoom to fit":["⤢ Ajustar à janela","⤢ Ajuster","⤢ Ajustar"],
+"A survey sets the ground. A DXF of closed polylines comes in as pads. Without either you get a demo site.":["Um levantamento define o terreno. Um DXF de polilinhas fechadas entra como plataformas. Sem nenhum, obtém um terreno de demonstração.","Un levé définit le terrain. Un DXF de polylignes fermées arrive comme plateformes. Sans l'un ni l'autre, vous avez un site de démonstration.","Un levantamiento define el terreno. Un DXF de polilíneas cerradas entra como plataformas. Sin ninguno, obtiene un terreno de demostración."],
+"Site grid":["Quadrícula do terreno","Quadrillage du site","Cuadrícula del terreno"],
+"Topsoil · works":["Terra vegetal · obra","Terre végétale · travaux","Tierra vegetal · obra"],
+"Topsoil · site":["Terra vegetal · terreno","Terre végétale · site","Tierra vegetal · terreno"],
+"Bulk earthworks":["Movimentação de terras","Terrassements","Movimiento de tierras"],
+"stripped ground → subgrade":["terreno decapado → sub-base","terrain décapé → sous-couche","terreno decapado → subrasante"],
+"off":["desligadas","désactivées","desactivadas"],
+"Snap corners to":["Ajustar cantos a","Accrocher les sommets à","Ajustar esquinas a"],
+"no snap":["sem ajuste","sans accrochage","sin ajuste"],
+"Export":["Exportar","Exportation","Exportar"],
+"⬇ Dev: export everything as data":["⬇ Dev: exportar tudo como dados","⬇ Dev : exporter tout en données","⬇ Dev: exportar todo como datos"],
+"Design surface spacing":["Espaçamento da superfície de projeto","Pas de la surface de projet","Espaciado de la superficie de proyecto"],
+"1 m — dense":["1 m — densa","1 m — dense","1 m — densa"],
+"5 m — light":["5 m — leve","5 m — légère","5 m — ligera"],
+"LandXML design surface":["Superfície de projeto LandXML","Surface de projet LandXML","Superficie de proyecto LandXML"],
+"DXF — outlines, levels, contours, cut/fill":["DXF — contornos, cotas, curvas, escavação/aterro","DXF — contours, niveaux, courbes, déblai/remblai","DXF — contornos, cotas, curvas, desmonte/relleno"],
+"The DXF carries pad outlines with corner levels, the daylight line, design contours, the cut and fill map and a legend — each on its own layer.":["O DXF leva os contornos das plataformas com as cotas dos cantos, a linha de encontro com o terreno, as curvas de projeto, o mapa de escavação e aterro e uma legenda — cada um na sua camada.","Le DXF contient les contours des plateformes avec les niveaux aux sommets, la ligne de raccordement au terrain, les courbes de projet, la carte déblai/remblai et une légende — chacun sur son calque.","El DXF lleva los contornos de las plataformas con las cotas de las esquinas, la línea de encuentro con el terreno, las curvas de proyecto, el mapa de desmonte y relleno y una leyenda — cada uno en su capa."],
+"Plan":["Planta","Plan","Planta"],
+"3D":["3D","3D","3D"],
+"Pad fill":["Preenchimento","Remplissage","Relleno"],
+"⬇ Dev data":["⬇ Dados dev","⬇ Données dev","⬇ Datos dev"],
+"Cut / fill":["Escavação / aterro","Déblai / remblai","Desmonte / relleno"],
+"Cut":["Escavação","Déblai","Desmonte"],
+"Fill":["Aterro","Remblai","Relleno"],
+"Balance":["Saldo","Solde","Saldo"],
+"balanced":["equilibrado","équilibré","equilibrado"],
+"import to site ":["importar para o terreno ","apport sur site ","importar al terreno "],
+"cut to waste ":["escavação a vazadouro ","déblai en dépôt ","desmonte a vertedero "],
+"Pad ":["Plataforma ","Plateforme ","Plataforma "],
+"grade within limits":["pendente dentro dos limites","pente dans les limites","pendiente dentro de los límites"],
+"cut and fill balanced":["escavação e aterro equilibrados","déblai et remblai équilibrés","desmonte y relleno equilibrados"],
+"batters stay on site":["taludes ficam dentro do terreno","talus restent sur le site","taludes quedan dentro del terreno"],
+"max batter height":["altura máxima de talude","hauteur max. de talus","altura máxima de talud"],
+"area":["área","surface","área"],
+"needs 3 corners":["precisa de 3 cantos","nécessite 3 sommets","necesita 3 esquinas"],
+"No corner within reach":["Nenhum canto ao alcance","Aucun sommet à proximité","Ninguna esquina al alcance"],
+"Now click where it should go":["Agora clique onde deve ficar","Cliquez maintenant où il doit aller","Ahora haga clic dónde debe ir"],
+"No pad there":["Nenhuma plataforma aí","Aucune plateforme ici","Ninguna plataforma ahí"],
+" selected":[" selecionada"," sélectionnée"," seleccionada"],
+"Balanced at ":["Equilibrada a ","Équilibrée à ","Equilibrada a "],
+"Nothing left to undo":["Nada para anular","Plus rien à annuler","Nada que deshacer"],
+"Nothing left to redo":["Nada para refazer","Plus rien à rétablir","Nada que rehacer"],
+"Edit undone":["Edição anulada","Modification annulée","Edición deshecha"],
+"Edit redone":["Edição refeita","Modification rétablie","Edición rehecha"],
+"Start a pad first":["Comece por criar uma plataforma","Créez d'abord une plateforme","Cree primero una plataforma"],
+"Survey loaded — ":["Levantamento carregado — ","Levé chargé — ","Levantamiento cargado — "],
+"That file is not readable LandXML":["Esse ficheiro não é LandXML legível","Ce fichier n'est pas un LandXML lisible","Ese archivo no es LandXML legible"],
+"No surface found in that file":["Nenhuma superfície encontrada nesse ficheiro","Aucune surface trouvée dans ce fichier","No se encontró ninguna superficie en ese archivo"],
+"Back on the demo site":["De volta ao terreno de demonstração","Retour au site de démonstration","De vuelta al terreno de demostración"],
+"DXF written":["DXF exportado","DXF exporté","DXF exportado"],
+"LandXML written":["LandXML exportado","LandXML exporté","LandXML exportado"],
+"ground ":["terreno ","terrain ","terreno "],
+"design ":["projeto ","projet ","proyecto "],
+};
+const LANGS=['en','pt','fr','es'],LI={pt:0,fr:1,es:2};
+let LANG='en';
+const FRAG=Object.keys(TR).sort((a,b)=>b.length-a.length);
+function T(s){
+  if(LANG==='en'||!s)return s;
+  const i=LI[LANG];
+  if(TR[s])return TR[s][i];
+  let o=s;for(const k of FRAG)if(o.includes(k))o=o.split(k).join(TR[k][i]);
+  return o;
+}
+let SNAPT=null;const TOUCHED=new Set();
+function applyLang(c){
+  LANG=LANGS.includes(c)?c:'en';
+  if(!SNAPT){
+    SNAPT=[];
+    const w=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT,{acceptNode(n){
+      const p=n.parentNode.nodeName;
+      if(p==='SCRIPT'||p==='STYLE')return NodeFilter.FILTER_REJECT;
+      return n.nodeValue.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_REJECT;}});
+    let n;while(n=w.nextNode())SNAPT.push([n,n.nodeValue]);
+  }
+  for(const [n,orig] of SNAPT){
+    const t=orig.trim();if(!t)continue;
+    const tr=T(t);
+    if(tr!==t){n.nodeValue=orig.replace(t,tr);TOUCHED.add(n);}
+    else if(TOUCHED.has(n)){n.nodeValue=orig;TOUCHED.delete(n);}
+  }
+  document.documentElement.lang=LANG==='pt'?'pt-PT':LANG;
+  try{localStorage.setItem('gradesolver-lang',LANG)}catch(e){}
+  drawPadList();drawEditor();showVol();layoutOverlays();draw();
+}
+let LASTNOTE='';
+const note=(t,warn)=>{LASTNOTE=t;const n=$('note');n.textContent=T(t);n.className=warn?'note warn':'note';};
+
+/* ─────────────────────────── state ─────────────────────────── */
+const PADCOL=['#4aa3ff','#b98cff','#4fd1c5','#f6a04d','#e6689a','#8fbf6a'];
+const S={
+  eg:null,              // {nx,ny,cell,x0,y0,z:Float32Array}
+  egName:'demo site',
+  pads:[], active:0, nPad:0,
+  tool:'select', pick:-1, snap:1,
+  sel:{kind:'pad',i:0},
+  bCut:2, bFill:3, cell:0.4, cInt:0.25,
+  showCF:true, mode:'plan',
+  fg:null, fgFin:null, fgBulk:null, cache:null, vol:null, volFin:null, volBulk:null,
+  cont:null, egCont:null, showEgCont:false, showGrid:false, gridSp:10, padFill:false, showFgCont:true, linkW:1.8, newW:40, newL:28,
+  strip:0.15, egStrip:null, volStrip:0, sect:null, sShow:{fin:1,sub:1,eg:1,strip:1},
+  view:{s:3,ox:0,oy:0}, cam:{az:-0.7,el:0.55,dist:1,tx:0,ty:0,tz:0}, vex:1.6,
+  hover:null,
+};
+const DEAD=0.03;
+let ZEROS=[];                 // under 30 mm is not earthworks
+
+/* ─────────────────────── ground ─────────────────────── */
+function makeGround(nx,ny,cell,x0,y0){
+  return {nx,ny,cell,x0,y0,z:new Float32Array(nx*ny)};
+}
+/** A believable little site: falls about 4% to the south-east with some roll. */
+function demoGround(){
+  const cell=1, nx=181, ny=141, g=makeGround(nx,ny,cell,0,0);
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+    const x=i*cell,y=j*cell;
+    g.z[j*nx+i]=42.0 - x*0.035 - y*0.018
+      + 0.45*Math.sin(x/27) + 0.32*Math.cos(y/21) + 0.18*Math.sin((x+y)/15);
+  }
+  return g;
+}
+const egAt=(x,y)=>{
+  const g=S.eg;
+  const fx=(x-g.x0)/g.cell, fy=(y-g.y0)/g.cell;
+  const i=Math.max(0,Math.min(g.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(g.ny-2,Math.floor(fy)));
+  const u=Math.max(0,Math.min(1,fx-i)), v=Math.max(0,Math.min(1,fy-j));
+  const a=g.z[j*g.nx+i],b=g.z[j*g.nx+i+1],c=g.z[(j+1)*g.nx+i],d=g.z[(j+1)*g.nx+i+1];
+  return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v;
+};
+const egBB=()=>({x0:S.eg.x0,y0:S.eg.y0,
+  x1:S.eg.x0+(S.eg.nx-1)*S.eg.cell, y1:S.eg.y0+(S.eg.ny-1)*S.eg.cell});
+
+/* ─────────────────── LandXML in ─────────────────── */
+function kids(el,name){const o=[];for(const c of el.getElementsByTagName('*'))if(c.localName===name)o.push(c);return o;}
+function loadLandXML(text,fname){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length)throw new Error('parse');
+  for(const sEl of kids(doc.documentElement,'Surface')){
+    const pB=kids(sEl,'Pnts')[0], fB=kids(sEl,'Faces')[0];
+    if(!pB||!fB)continue;
+    const P=kids(pB,'P'), F=kids(fB,'F');
+    if(!P.length||!F.length)continue;
+    const id=new Map(), xs=[],ys=[],zs=[];
+    P.forEach((p,i)=>{
+      const v=p.textContent.trim().split(/\s+/).map(Number);
+      xs.push(v[1]);ys.push(v[0]);zs.push(v[2]);          // LandXML: northing easting elev
+      id.set(p.getAttribute('id')??String(i+1),i);
+    });
+    const tri=[];
+    for(const f of F){
+      if(f.getAttribute('i')==='1')continue;
+      const v=f.textContent.trim().split(/\s+/);
+      const a=id.get(v[0]),b=id.get(v[1]),c=id.get(v[2]);
+      if(a!=null&&b!=null&&c!=null)tri.push(a,b,c);
+    }
+    if(!tri.length)continue;
+    const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+    const cell=Math.max(0.5,Math.min(2,Math.hypot(x1-x0,y1-y0)/300));
+    const nx=Math.ceil((x1-x0)/cell)+1, ny=Math.ceil((y1-y0)/cell)+1;
+    const g=makeGround(nx,ny,cell,x0,y0);
+    g.z.fill(NaN);
+    for(let t=0;t<tri.length;t+=3){                       // rasterise the TIN
+      const a=tri[t],b=tri[t+1],c=tri[t+2];
+      const ax=xs[a],ay=ys[a],az=zs[a],bx=xs[b],by=ys[b],bz=zs[b],cx0=xs[c],cy0=ys[c],cz=zs[c];
+      const den=(by-cy0)*(ax-cx0)+(cx0-bx)*(ay-cy0);
+      if(Math.abs(den)<1e-12)continue;
+      const i0=Math.max(0,Math.floor((Math.min(ax,bx,cx0)-x0)/cell)),
+            i1=Math.min(nx-1,Math.ceil((Math.max(ax,bx,cx0)-x0)/cell)),
+            j0=Math.max(0,Math.floor((Math.min(ay,by,cy0)-y0)/cell)),
+            j1=Math.min(ny-1,Math.ceil((Math.max(ay,by,cy0)-y0)/cell));
+      for(let j=j0;j<=j1;j++){const yy=y0+j*cell;
+        for(let i=i0;i<=i1;i++){const xx=x0+i*cell;
+          const l1=((by-cy0)*(xx-cx0)+(cx0-bx)*(yy-cy0))/den; if(l1<-1e-9)continue;
+          const l2=((cy0-ay)*(xx-cx0)+(ax-cx0)*(yy-cy0))/den; if(l2<-1e-9)continue;
+          const l3=1-l1-l2; if(l3<-1e-9)continue;
+          g.z[j*nx+i]=l1*az+l2*bz+l3*cz;
+        }}
+    }
+    for(let k=0;k<g.z.length;k++)if(g.z[k]!==g.z[k])g.z[k]=zs[0];   // fill gaps flat
+    return {g,name:sEl.getAttribute('name')||fname.replace(/\.[^.]+$/,''),pts:P.length,tris:tri.length/3};
+  }
+  return null;
+}
+
+/* ─────────────────── pads ─────────────────── */
+function padCentre(p){
+  let cx=0,cy=0;for(const q of p.pts){cx+=q.x;cy+=q.y;}
+  return {cx:cx/p.pts.length, cy:cy/p.pts.length};
+}
+function refreshCentre(p){const c=padCentre(p);p.cx=c.cx;p.cy=c.cy;p.tris=null;}
+function padArea(p){
+  let a=0;const P=p.pts;
+  for(let i=0,j=P.length-1;i<P.length;j=i++)a+=(P[j].x+P[i].x)*(P[j].y-P[i].y);
+  return Math.abs(a/2);
+}
+/** ear-clip the outline so the pad interior is a proper little TIN */
+function earClip(P){
+  const n=P.length; if(n<3)return [];
+  const idx=[...Array(n).keys()];
+  let a=0; for(let i=0,j=n-1;i<n;j=i++)a+=(P[j].x*P[i].y-P[i].x*P[j].y);
+  if(a<0)idx.reverse();
+  const cr=(o,p,q)=>(p.x-o.x)*(q.y-o.y)-(p.y-o.y)*(q.x-o.x);
+  const tris=[]; let guard=0;
+  while(idx.length>3&&guard++<n*n+8){
+    let cut=false;
+    for(let i=0;i<idx.length;i++){
+      const a0=idx[(i+idx.length-1)%idx.length],b0=idx[i],c0=idx[(i+1)%idx.length];
+      const A=P[a0],B=P[b0],C=P[c0];
+      if(cr(A,B,C)<=0)continue;                       // reflex corner, not an ear
+      let clean=true;
+      for(const k of idx){
+        if(k===a0||k===b0||k===c0)continue;
+        const Q=P[k];
+        if(cr(A,B,Q)>=0&&cr(B,C,Q)>=0&&cr(C,A,Q)>=0){clean=false;break;}
+      }
+      if(!clean)continue;
+      tris.push([a0,b0,c0]);idx.splice(i,1);cut=true;break;
+    }
+    if(!cut)break;
+  }
+  if(idx.length===3)tris.push([idx[0],idx[1],idx[2]]);
+  return tris;
+}
+/** design level anywhere inside the pad, interpolated from the corner levels */
+function padZ(p,x,y){
+  if(!p.pts.length)return 0;
+  if(p.pts.length<3)return p.pts[0].z;
+  if(!p.tris)p.tris=earClip(p.pts);
+  for(const t of p.tris){
+    const A=p.pts[t[0]],B=p.pts[t[1]],C=p.pts[t[2]];
+    const den=(B.y-C.y)*(A.x-C.x)+(C.x-B.x)*(A.y-C.y);
+    if(Math.abs(den)<1e-12)continue;
+    const l1=((B.y-C.y)*(x-C.x)+(C.x-B.x)*(y-C.y))/den;
+    const l2=((C.y-A.y)*(x-C.x)+(A.x-C.x)*(y-C.y))/den;
+    const l3=1-l1-l2;
+    if(l1>=-1e-6&&l2>=-1e-6&&l3>=-1e-6)return l1*A.z+l2*B.z+l3*C.z;
+  }
+  return nearestOnPoly(x,y,p.pts).z;
+}
+/** least-squares fall through the corners — the pad's overall grade and aspect */
+function padFall(p){
+  const n=p.pts.length; if(n<3)return {grade:0,dir:0};
+  let sx=0,sy=0,sz=0,sxx=0,syy=0,sxy=0,sxz=0,syz=0;
+  for(const q of p.pts){sx+=q.x;sy+=q.y;sz+=q.z;sxx+=q.x*q.x;syy+=q.y*q.y;sxy+=q.x*q.y;sxz+=q.x*q.z;syz+=q.y*q.z;}
+  const M=[[sxx,sxy,sx],[sxy,syy,sy],[sx,sy,n]],B=[sxz,syz,sz];
+  for(let c=0;c<3;c++){
+    let pv=c;for(let r=c+1;r<3;r++)if(Math.abs(M[r][c])>Math.abs(M[pv][c]))pv=r;
+    if(Math.abs(M[pv][c])<1e-9)return {grade:0,dir:0};
+    [M[c],M[pv]]=[M[pv],M[c]];[B[c],B[pv]]=[B[pv],B[c]];
+    for(let r=0;r<3;r++)if(r!==c){const f=M[r][c]/M[c][c];for(let k=c;k<3;k++)M[r][k]-=f*M[c][k];B[r]-=f*B[c];}
+  }
+  const ax=B[0]/M[0][0], ay=B[1]/M[1][1];
+  const g=Math.hypot(ax,ay);
+  let dir=Math.atan2(-ax,-ay)*180/Math.PI; if(dir<0)dir+=360;   // bearing of steepest fall
+  return {grade:g*100,dir};
+}
+const edgeLen=(p,i)=>{const A=p.pts[i],B=p.pts[(i+1)%p.pts.length];return Math.hypot(B.x-A.x,B.y-A.y);};
+const edgeGrade=(p,i)=>{const A=p.pts[i],B=p.pts[(i+1)%p.pts.length],L=edgeLen(p,i);
+  return L>1e-6?(B.z-A.z)/L*100:0;};
+
+const inPoly=(x,y,P)=>{
+  let inside=false;
+  for(let i=0,j=P.length-1;i<P.length;j=i++){
+    const xi=P[i].x,yi=P[i].y,xj=P[j].x,yj=P[j].y;
+    if((yi>y)!==(yj>y)&&x<(xj-xi)*(y-yi)/(yj-yi)+xi)inside=!inside;
+  }
+  return inside;
+};
+/** closest point on a polygon boundary, with its squared distance */
+function nearestOnPoly(x,y,P){
+  let bd=Infinity,bx=0,by=0,bz=0,ba=0,bb=0,bt=0;
+  for(let i=0,j=P.length-1;i<P.length;j=i++){
+    const A=P[j],B=P[i],dx=B.x-A.x,dy=B.y-A.y;
+    const L=dx*dx+dy*dy;
+    let t=L?((x-A.x)*dx+(y-A.y)*dy)/L:0; t=t<0?0:t>1?1:t;
+    const px=A.x+t*dx,py=A.y+t*dy,d=(x-px)*(x-px)+(y-py)*(y-py);
+    if(d<bd){bd=d;bx=px;by=py;bz=A.z+t*(B.z-A.z);ba=j;bb=i;bt=t;}
+  }
+  return {d2:bd,x:bx,y:by,z:bz,a:ba,b:bb,t:bt};
+}
+/** which corners hold this point, and in what proportion — the recipe that lets
+ *  a level change be re-applied without redoing any geometry */
+function padWeights(p,x,y){
+  if(p.pts.length>=3){
+    if(!p.tris)p.tris=earClip(p.pts);
+    for(const t of p.tris){
+      const A=p.pts[t[0]],B=p.pts[t[1]],C=p.pts[t[2]];
+      const den=(B.y-C.y)*(A.x-C.x)+(C.x-B.x)*(A.y-C.y);
+      if(Math.abs(den)<1e-12)continue;
+      const l1=((B.y-C.y)*(x-C.x)+(C.x-B.x)*(y-C.y))/den;
+      const l2=((C.y-A.y)*(x-C.x)+(A.x-C.x)*(y-C.y))/den;
+      const l3=1-l1-l2;
+      if(l1>=-1e-6&&l2>=-1e-6&&l3>=-1e-6)
+        return {i0:t[0],i1:t[1],i2:t[2],w0:l1,w1:l2,w2:l3};
+    }
+  }
+  const n=nearestOnPoly(x,y,p.pts);
+  return {i0:n.a,i1:n.b,i2:n.a,w0:1-n.t,w1:n.t,w2:0};
+}
+function newPad(x,y,w,h,fall,dir){
+  const id=++S.nPad;
+  const p={name:'Pad '+id, col:PADCOL[(id-1)%PADCOL.length],
+    pts:[{x,y,z:0},{x:x+w,y,z:0},{x:x+w,y:y+h,z:0},{x,y:y+h,z:0}], cx:0, cy:0, tris:null, depth:0};
+  refreshCentre(p);
+  setPlane(p, +egAt(p.cx,p.cy).toFixed(2), fall??1.5, dir??135);
+  return p;
+}
+/** lay a plane through the pad: sets every corner level at once */
+function setPlane(p,level,fall,dir){
+  refreshCentre(p);
+  const th=dir*Math.PI/180, ux=Math.sin(th), uy=Math.cos(th);
+  for(const q of p.pts)q.z=+(level-(fall/100)*((q.x-p.cx)*ux+(q.y-p.cy)*uy)).toFixed(3);
+  p.tris=null;
+}
+
+/* ─────────────── the design surface ───────────────
+   Two passes. The geometry pass is the slow one and only reruns when a pad
+   outline or the grid changes; it records, for every cell, which pad controls
+   it, how far outside that pad it lies, and the fall component of the plane at
+   the controlling point. The level pass is then pure arithmetic, so nudging a
+   level or solving a balance is instant.                                      */
+function buildCache(){
+  const bb=egBB(), cell=S.cell;
+  const nx=Math.floor((bb.x1-bb.x0)/cell)+1, ny=Math.floor((bb.y1-bb.y0)/cell)+1;
+  const N=nx*ny;
+  const pad=new Int16Array(N).fill(-1);
+  const dist=new Float32Array(N);
+  const eg=new Float32Array(N);
+  // the three corners that hold each cell, and their weights
+  const ci0=new Int16Array(N),ci1=new Int16Array(N),ci2=new Int16Array(N);
+  const cw0=new Float32Array(N),cw1=new Float32Array(N),cw2=new Float32Array(N);
+  const reach=S.pads.map(p=>{
+    let drop=4;
+    for(const q of p.pts)drop=Math.max(drop,Math.abs(q.z-egAt(q.x,q.y))+3);
+    return drop*Math.max(S.bCut,S.bFill)+2;
+  });
+  S.pads.forEach(p=>{p.tris=null;});
+  const boxes=S.pads.map((p,i)=>{
+    let x0=Infinity,x1=-Infinity,y0=Infinity,y1=-Infinity;
+    for(const q of p.pts){x0=Math.min(x0,q.x);x1=Math.max(x1,q.x);y0=Math.min(y0,q.y);y1=Math.max(y1,q.y);}
+    const r=reach[i]; return {x0:x0-r,x1:x1+r,y0:y0-r,y1:y1+r};
+  });
+  for(let j=0;j<ny;j++){
+    const y=bb.y0+j*cell;
+    for(let i=0;i<nx;i++){
+      const x=bb.x0+i*cell, k=j*nx+i;
+      eg[k]=egAt(x,y);
+      let best=-1,bd=Infinity,bx=0,by=0;
+      for(let pi=0;pi<S.pads.length;pi++){
+        const p=S.pads[pi]; if(p.pts.length<3)continue;
+        const B=boxes[pi]; if(x<B.x0||x>B.x1||y<B.y0||y>B.y1)continue;
+        if(inPoly(x,y,p.pts)){best=pi;bd=0;bx=x;by=y;break;}
+        const n=nearestOnPoly(x,y,p.pts);
+        if(n.d2<bd){bd=n.d2;best=pi;bx=n.x;by=n.y;}
+      }
+      if(best<0){pad[k]=-1;continue;}
+      const d=bd===0?0:Math.sqrt(bd);
+      if(d>reach[best]){pad[k]=-1;continue;}
+      pad[k]=best; dist[k]=d;
+      const wq=d===0?padWeights(S.pads[best],x,y)
+                    :(()=>{const n=nearestOnPoly(x,y,S.pads[best].pts);
+                           return {i0:n.a,i1:n.b,i2:n.a,w0:1-n.t,w1:n.t,w2:0};})();
+      ci0[k]=wq.i0;ci1[k]=wq.i1;ci2[k]=wq.i2;cw0[k]=wq.w0;cw1[k]=wq.w1;cw2[k]=wq.w2;
+    }
+  }
+  S.cache={nx,ny,cell,x0:bb.x0,y0:bb.y0,pad,dist,eg,ci0,ci1,ci2,cw0,cw1,cw2};
+}
+/** cheap pass: turn the cache plus current levels into the finished surface */
+function buildFG(shift,bulk){
+  const C=S.cache; if(!C)return null;
+  const L=shift||ZEROS;
+  const dep=S.pads.map(p=>bulk?(p.depth||0):0);  // dig to underside of pavement or slab
+  const PZ=S.pads.map(p=>p.pts.map(q=>q.z));     // corner levels, read once
+  const fg=new Float32Array(C.pad.length);
+  for(let k=0;k<fg.length;k++){
+    const pi=C.pad[k], g=C.eg[k];
+    if(pi<0){fg[k]=g;continue;}
+    const Z=PZ[pi];
+    const z=Z[C.ci0[k]]*C.cw0[k]+Z[C.ci1[k]]*C.cw1[k]+Z[C.ci2[k]]*C.cw2[k]+(L[pi]||0);
+    if(C.dist[k]===0){fg[k]=z-dep[pi];continue;}   // in the pad: the box is dug out
+    // on the batter: earthworks in natural material, off the finished pad edge, so
+    // the box depth plays no part out here
+    if(z>=g)fg[k]=Math.max(z-C.dist[k]/S.bFill, g);
+    else    fg[k]=Math.min(z+C.dist[k]/S.bCut, g);
+  }
+  return fg;
+}
+function volumeOf(fg,base){
+  const C=S.cache, A=C.cell*C.cell, B=base||C.eg;
+  let cut=0,fill=0;
+  for(let k=0;k<fg.length;k++){
+    const d=fg[k]-B[k];
+    if(d>DEAD)fill+=d; else if(d<-DEAD)cut-=d;
+  }
+  return {cut:cut*A,fill:fill*A,net:(fill-cut)*A};
+}
+function rebuild(geom){
+  ZEROS=S.pads.map(()=>0);
+  if(geom||!S.cache)buildCache();
+  const C=S.cache;
+  S.fgFin=buildFG(null,false);
+  S.hasDepth=S.pads.some(p=>(p.depth||0)>0.001);
+  S.fgBulk=S.hasDepth?buildFG(null,true):S.fgFin;
+  // the construction extent is where the design actually moves the ground, plus
+  // the pads themselves — not the area the batter search had to look through
+  S.extent=new Uint8Array(C.eg.length);
+  let stripCells=0;
+  for(let k=0;k<C.eg.length;k++){
+    const g=C.eg[k];
+    const inPad=C.pad[k]>=0&&C.dist[k]===0;
+    const moved=Math.abs(S.fgFin[k]-g)>DEAD||Math.abs(S.fgBulk[k]-g)>DEAD;
+    if(inPad||moved){S.extent[k]=1;stripCells++;}
+  }
+  // topsoil comes off inside that extent, and the earthworks sit on what is left
+  S.egStrip=new Float32Array(C.eg.length);
+  for(let k=0;k<C.eg.length;k++)S.egStrip[k]=S.extent[k]?C.eg[k]-S.strip:C.eg[k];
+  S.volStrip=stripCells*C.cell*C.cell*S.strip;
+  const bb=egBB();
+  S.volStripAll=(bb.x1-bb.x0)*(bb.y1-bb.y0)*S.strip;
+  S.volBulk=volumeOf(S.fgBulk,S.egStrip);       // the earthworks that actually get moved
+  S.fg=S.fgBulk;
+  S.vol=S.volBulk;
+  S.cont=(S.showFgCont&&S.cInt>0)?isolines(S.fgFin,S.cInt):null;   // the design you set out to
+  S.egCont=(S.showEgCont&&S.cInt>0)?isolines(C.eg,S.cInt):null;
+  showVol();drawPadList();drawEditor();draw();
+}
+/** solve the level at which this pad's earthworks balance across the site */
+function balancePad(pi){
+  const p=S.pads[pi];
+  if(p.pts.length<3){note('A pad needs three corners',true);return;}
+  const sh=S.pads.map(()=>0), bulk=true;
+  if(!S.egStrip)rebuild(true);
+  const base=S.egStrip;
+  const net=v=>{sh[pi]=v;return volumeOf(buildFG(sh,bulk),base).net;};
+  let lo=-25,hi=25;
+  if(net(lo)>0||net(hi)<0){note('Cut and fill will not balance within ±25 m',true);return;}
+  for(let k=0;k<28;k++){const m=(lo+hi)/2; if(net(m)>0)hi=m; else lo=m;}
+  const d=(lo+hi)/2;
+  p.pts.forEach(q=>q.z=+(q.z+d).toFixed(3));
+  rebuild();syncPadInputs();
+  note('Balanced — pad moved '+(d>=0?'up ':'down ')+Math.abs(d).toFixed(3)+' m');
+}
+
+/* ─────────────── contours (marching squares) ─────────────── */
+function isolines(grid,iv){
+  const C=S.cache,nx=C.nx,ny=C.ny,cell=C.cell;
+  const map=new Map();
+  let total=0;
+  for(let j=0;j<ny-1;j++){
+    const y=C.y0+j*cell, r0=j*nx, r1=(j+1)*nx;
+    for(let i=0;i<nx-1;i++){
+      const a=grid[r0+i],b=grid[r0+i+1],c=grid[r1+i+1],d=grid[r1+i];
+      let lo=a,hi=a;
+      if(b<lo)lo=b;else if(b>hi)hi=b;
+      if(c<lo)lo=c;else if(c>hi)hi=c;
+      if(d<lo)lo=d;else if(d>hi)hi=d;
+      if(hi-lo<1e-4)continue;                  // flat cell — nothing crosses it
+      const k0=Math.ceil(lo/iv), k1=Math.floor(hi/iv);
+      if(k1<k0)continue;                       // no contour crosses this cell
+      const x=C.x0+i*cell;
+      for(let k=k0;k<=k1;k++){
+        const z=k*iv;
+        const idx=(a>z?1:0)|(b>z?2:0)|(c>z?4:0)|(d>z?8:0);
+        if(idx===0||idx===15)continue;
+        const t=(p,q)=>(z-p)/(q-p||1e-9);
+        const e1={x:x+cell*t(a,b),y:y},        e2={x:x+cell,y:y+cell*t(b,c)},
+              e3={x:x+cell*t(d,c),y:y+cell},   e4={x:x,y:y+cell*t(a,d)};
+        let arr=map.get(k); if(!arr){arr=[];map.set(k,arr);}
+        switch(idx){
+          case 1:case 14:arr.push([e4,e1]);break;
+          case 2:case 13:arr.push([e1,e2]);break;
+          case 3:case 12:arr.push([e4,e2]);break;
+          case 4:case 11:arr.push([e2,e3]);break;
+          case 6:case 9: arr.push([e1,e3]);break;
+          case 7:case 8: arr.push([e4,e3]);break;
+          case 5:arr.push([e4,e1]);arr.push([e2,e3]);break;
+          case 10:arr.push([e1,e2]);arr.push([e4,e3]);break;
+        }
+        if(++total>240000)return finishIso(map,iv);   // guard against silly intervals
+      }
+    }
+  }
+  return finishIso(map,iv);
+}
+function finishIso(map,iv){
+  const out=[];
+  for(const [k,segs] of [...map.entries()].sort((a,b)=>a[0]-b[0]))
+    out.push({z:k*iv,major:k%5===0,segs});
+  return out;
+}
+
+/* ─────────────── panel ─────────────── */
+const m3=v=>Math.round(v).toLocaleString()+' m³';
+function showVol(){
+  if(!S.vol){$('vcut').textContent=$('vfill').textContent=$('vnet').textContent=$('vstrip').textContent=$('vstripAll').textContent='—';return;}
+  $('vcut').textContent=m3(S.vol.cut);
+  $('vfill').textContent=m3(S.vol.fill);
+  $('vstrip').textContent=S.strip>0?m3(S.volStrip):'—';
+  $('vstripAll').textContent=S.strip>0?m3(S.volStripAll):'—';
+  const n=S.vol.net, tol=Math.max(2,0.002*Math.max(S.vol.cut,S.vol.fill));
+  $('vnet').textContent=Math.abs(n)<tol?T('balanced')
+    :(n>0?T('import to site ')+m3(n):T('cut to waste ')+m3(-n));
+}
+/** what did the click land on: a corner, a string, or the body of a pad? */
+function hitTest(sx,sy){
+  const wx=WX(sx),wy=WY(sy);
+  let best=null,bd=13*13;
+  S.pads.forEach((p,pi)=>p.pts.forEach((q,qi)=>{
+    const dx=PX(q.x)-sx,dy=PY(q.y)-sy,d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best={kind:'corner',pad:pi,i:qi};}
+  }));
+  if(best)return best;
+  let ed=10*10;
+  S.pads.forEach((p,pi)=>{
+    if(p.pts.length<2)return;
+    for(let i=0;i<p.pts.length;i++){
+      const A=p.pts[i],B=p.pts[(i+1)%p.pts.length];
+      const ax=PX(A.x),ay=PY(A.y),bx=PX(B.x),by=PY(B.y);
+      const dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+      let t=L?((sx-ax)*dx+(sy-ay)*dy)/L:0;t=t<0?0:t>1?1:t;
+      const d=(sx-ax-t*dx)**2+(sy-ay-t*dy)**2;
+      if(d<ed){ed=d;best={kind:'edge',pad:pi,i};}
+    }
+  });
+  if(best)return best;
+  const pi=S.pads.findIndex(p=>p.pts.length>2&&inPoly(wx,wy,p.pts));
+  return pi>=0?{kind:'pad',pad:pi,i:0}:null;
+}
+const selPad=()=>S.pads[S.active];
+function select(h){
+  if(!h){S.sel={kind:'pad',i:0};drawEditor();draw();note('Nothing there');return;}
+  S.active=h.pad;S.sel={kind:h.kind,i:h.i};
+  drawPadList();drawEditor();draw();
+}
+/** the editor changes with what you have picked — nothing else is on show */
+/** the level a neighbouring pad holds at this point, if there is one close by */
+function neighbourZ(x,y,skip){
+  let best=null,bd=Infinity;
+  S.pads.forEach((q,qi)=>{
+    if(qi===skip||q.pts.length<2)return;
+    if(q.pts.length>2&&inPoly(x,y,q.pts)){const z=padZ(q,x,y);if(0<bd){bd=0;best=z;}return;}
+    const n=nearestOnPoly(x,y,q.pts);
+    if(n.d2<bd){bd=n.d2;best=n.z;}
+  });
+  return (best!==null&&bd<=0.36)?best:null;      // within 600 mm counts as matching
+}
+function drapeStake(pi,qi,mode){
+  const p=S.pads[pi], q=p.pts[qi];
+  if(mode==='ground'){q.z=+egAt(q.x,q.y).toFixed(3);return true;}
+  const z=neighbourZ(q.x,q.y,pi);
+  if(z===null)return false;
+  q.z=+z.toFixed(3);return true;
+}
+function drapeString(mode){
+  const pi=S.active, p=S.pads[pi], i=S.sel.i, j=(i+1)%p.pts.length;
+  push();
+  const a=drapeStake(pi,i,mode), b=drapeStake(pi,j,mode);
+  if(!a&&!b){UND.pop();note(mode==='ground'?'Could not drape':'No pad meets that string',true);return;}
+  rebuild();
+  note(mode==='ground'?'String draped onto the ground':'String draped onto the pad it meets');
+}
+function drawEditor(){
+  const box=$('selEditor'); if(!box)return;
+  const p=selPad();
+  if(!p){box.innerHTML='<p class="hint">'+T('Add a pad to begin.')+'</p>';return;}
+  const k=S.sel.kind;
+  if(k==='corner'&&S.sel.i<p.pts.length){
+    const q=p.pts[S.sel.i], g=egAt(q.x,q.y), d=q.z-g;
+    box.innerHTML=
+      `<label class="f">${T('Corner')} ${S.sel.i+1} ${T('level')}</label>`+
+      `<div class="g4">
+         <button data-cz="-0.25">−0.25</button><button data-cz="-0.05">−0.05</button>
+         <button data-cz="0.05">+0.05</button><button data-cz="0.25">+0.25</button></div>`+
+      `<div class="row" style="margin-top:5px">
+         <input type="number" id="cZ" step="0.01" value="${q.z.toFixed(3)}">
+         <button id="cToGround" style="flex:.9">${T('To ground')}</button></div>`+
+      `<div class="kv" style="margin-top:6px"><span>${T('Ground here')}</span><span>${g.toFixed(3)} m</span></div>`+
+      `<div class="kv"><span>${Math.abs(d)<=DEAD?'—':(d>0?T('fill'):T('cut'))}</span>`+
+      `<span class="${d>0?'fill':'cut'}">${d>=0?'+':'−'}${Math.abs(d).toFixed(3)} m</span></div>`;
+  }else if(k==='edge'&&p.pts.length>1){
+    const i=S.sel.i, A=p.pts[i], B=p.pts[(i+1)%p.pts.length];
+    box.innerHTML=
+      `<label class="f">${T('String')} ${i+1}–${(i+1)%p.pts.length+1} ${T('grade')}</label>`+
+      `<div class="row">
+         <input type="number" id="eG" step="0.1" value="${edgeGrade(p,i).toFixed(2)}">
+         <button id="eSet" style="flex:.7">${T('Set')}</button></div>`+
+      `<p class="hint">${T('Setting the grade lifts or drops the far end of the string.')}</p>`+
+      `<div class="g2">
+         <button id="eDrapeP">${T('Drape to pad')}</button>
+         <button id="eDrapeG">${T('Drape to ground')}</button></div>`+
+      `<button class="wide" id="eSplit">${T('Add a stake at mid-string')}</button>`+
+      `<div class="kv"><span>${T('Length')}</span><span>${edgeLen(p,i).toFixed(2)} m</span></div>`+
+      `<div class="kv"><span>${T('From')}</span><span>${A.z.toFixed(3)} m</span></div>`+
+      `<div class="kv"><span>${T('To')}</span><span>${B.z.toFixed(3)} m</span></div>`;
+  }else{
+    const f=padFall(p);
+    box.innerHTML=
+      `<label class="f">${T('Name and colour')}</label>`+
+      `<div class="row">
+         <input type="text" id="pName" value="${p.name.replace(/"/g,'&quot;')}">
+         <input type="color" id="pCol" value="${p.col}" style="flex:0 0 30px;height:26px"></div>`+
+      `<label class="f">${T('Move the whole pad')}</label>`+
+      `<div class="g4">
+         <button data-dz="-0.25">−0.25</button><button data-dz="-0.05">−0.05</button>
+         <button data-dz="0.05">+0.05</button><button data-dz="0.25">+0.25</button></div>`+
+      `<div class="row" style="margin-top:5px">
+         <input type="number" id="allZ" step="0.01" value="${meanZ(p).toFixed(3)}">
+         <button id="allSet" style="flex:.9">${T('All corners')}</button></div>`+
+      `<p class="hint">${T('Sets every corner of this pad to one level — a flat pad.')}</p>`+
+
+      `<div class="kv"><span>${T('Overall fall')}</span><span>${f.grade.toFixed(2)}% → ${bearing(f.dir)}</span></div>`+
+      `<div class="kv"><span>${T('area')}</span><span>${Math.round(padArea(p)).toLocaleString()} m²</span></div>`+
+      `<label class="f">${T('Construction depth')}</label>`+
+      `<div class="row">
+         <input type="number" id="pDepth" step="0.05" min="0" value="${(p.depth||0).toFixed(3)}">
+         <select id="pDepthPre" style="flex:1.3">
+           <option value="">…</option>
+           <option value="0">none</option>
+           <option value="0.15">0.15 m — topsoil strip</option>
+           <option value="0.35">0.35 m — light carpark</option>
+           <option value="0.45">0.45 m — carpark / access</option>
+           <option value="0.5">0.50 m — slab and hardcore</option>
+           <option value="0.6">0.60 m — heavy yard</option>
+         </select></div>`+
+      `<p class="hint">${T('Bulk earthworks are taken to this depth below the finished surface.')}</p>`+
+      `<label class="f">${T('Lay a plane over it')}</label>`+
+      `<div class="row">
+         <input type="number" id="plFall" step="0.1" min="0" value="${f.grade.toFixed(2)}" title="%">
+         <select id="plDir">${[0,45,90,135,180,225,270,315].map(d=>
+           `<option value="${d}" ${Math.abs(d-f.dir)<23?'selected':''}>${T(DIRN[d/45])}</option>`).join('')}</select>
+       </div><button class="wide" id="plGo">${T('Apply plane')}</button>`;
+  }
+  wireEditor();
+}
+const meanZ=p=>p.pts.length?p.pts.reduce((a,q)=>a+q.z,0)/p.pts.length:0;
+const DIRN=['North','North-east','East','South-east','South','South-west','West','North-west'];
+const bearing=d=>T(DIRN[Math.round(((d%360)+360)%360/45)%8]);
+function wireEditor(){
+  const p=selPad(); if(!p)return;
+  document.querySelectorAll('[data-cz]').forEach(b=>b.onclick=()=>{
+    push();p.pts[S.sel.i].z=+(p.pts[S.sel.i].z+ +b.dataset.cz).toFixed(3);rebuild();});
+  const cz=$('cZ');
+  if(cz)cz.onchange=e=>{push();p.pts[S.sel.i].z=+e.target.value||0;rebuild();};
+  const cg=$('cToGround');
+  if(cg)cg.onclick=()=>{const q=p.pts[S.sel.i];push();q.z=+egAt(q.x,q.y).toFixed(3);rebuild();};
+  const dpp=$('eDrapeP'); if(dpp)dpp.onclick=()=>drapeString('pad');
+  const dpg=$('eDrapeG'); if(dpg)dpg.onclick=()=>drapeString('ground');
+  const spl=$('eSplit');
+  if(spl)spl.onclick=()=>{
+    const i=S.sel.i,A=p.pts[i],B=p.pts[(i+1)%p.pts.length];
+    push();
+    p.pts.splice(i+1,0,{x:+((A.x+B.x)/2).toFixed(3),y:+((A.y+B.y)/2).toFixed(3),z:+((A.z+B.z)/2).toFixed(3)});
+    refreshCentre(p);S.sel={kind:'corner',i:i+1};rebuild(true);
+  };
+  const es=$('eSet');
+  if(es)es.onclick=()=>{
+    const i=S.sel.i,A=p.pts[i],B=p.pts[(i+1)%p.pts.length],L=edgeLen(p,i);
+    push();B.z=+(A.z+(+$('eG').value||0)/100*L).toFixed(3);rebuild();
+  };
+  document.querySelectorAll('[data-dz]').forEach(b=>b.onclick=()=>{
+    push();p.pts.forEach(q=>q.z=+(q.z+ +b.dataset.dz).toFixed(3));rebuild();});
+  const nm=$('pName');
+  if(nm){
+    nm.onchange=e=>{const v=e.target.value.trim();if(v){p.name=v;drawPadList();draw();}};
+    nm.onkeydown=e=>{if(e.key==='Enter')nm.blur();};
+  }
+  const pc=$('pCol');
+  if(pc)pc.oninput=e=>{p.col=e.target.value;drawPadList();draw();};
+  const az=$('allSet');
+  if(az)az.onclick=()=>{const v=+$('allZ').value||0;push();p.pts.forEach(q=>q.z=+v.toFixed(3));rebuild();};
+  const dp=$('pDepth');
+  if(dp)dp.onchange=e=>{push();p.depth=Math.max(0,+e.target.value||0);rebuild();};
+  const dpre=$('pDepthPre');
+  if(dpre)dpre.onchange=e=>{if(e.target.value==='')return;push();p.depth=+e.target.value;rebuild();};
+  const pg=$('plGo');
+  if(pg)pg.onclick=()=>{
+    push();
+    setPlane(p,+meanZ(p).toFixed(3),Math.max(0,+$('plFall').value||0),+$('plDir').value);
+    rebuild();
+  };
+}
+
+function drawPadList(){
+  const box=$('padlist');box.innerHTML='';
+  S.pads.forEach((p,i)=>{
+    const d=document.createElement('div');
+    d.className='pad'+(i===S.active?' on':'');
+    const mean=meanZ(p), f=padFall(p);
+    d.innerHTML=`<div class="nm"><span class="sw" style="background:${p.col}"></span>${p.name}</div>`+
+      `<div class="meta">${mean.toFixed(2)} m · ${f.grade.toFixed(1)}% · `+
+      `${Math.round(padArea(p)).toLocaleString()} m²${p.depth?' · −'+p.depth.toFixed(2)+' m':''}</div>`;
+    d.onclick=()=>{S.active=i;S.sel={kind:'pad',i:0};drawPadList();drawEditor();draw();};
+    box.appendChild(d);
+  });
+}
+function syncPadInputs(){drawEditor();}
+
+/* ─────────────── undo ─────────────── */
+const UND=[],RED=[];
+const snapshot=()=>S.pads.map(p=>({...p,pts:p.pts.map(q=>({...q}))}));
+function push(){UND.push(snapshot());if(UND.length>40)UND.shift();RED.length=0;}
+function undo(){if(!UND.length){note('Nothing left to undo');return;}
+  RED.push(snapshot());S.pads=UND.pop();S.active=Math.min(S.active,S.pads.length-1);
+  syncPadInputs();rebuild(true);note('Edit undone');}
+function redo(){if(!RED.length){note('Nothing left to redo');return;}
+  UND.push(snapshot());S.pads=RED.pop();syncPadInputs();rebuild(true);note('Edit redone');}
+
+/* ─────────────── canvas ─────────────── */
+const cv=$('cv'),cx=cv.getContext('2d');
+let W=0,H=0;
+function layoutOverlays(){
+  const bar=document.querySelector('.bar');
+  bar.style.top='9px';
+  const tb=document.querySelector('.tabs').getBoundingClientRect();
+  const br=bar.getBoundingClientRect();
+  const mn=document.querySelector('main').getBoundingClientRect();
+  // only nudge it down if the two would actually touch
+  if(br.left<tb.right+8&&br.top<tb.bottom)
+    bar.style.top=Math.round(tb.bottom-mn.top+8)+'px';
+}
+addEventListener('resize',layoutOverlays);
+function resize(){
+  const d=Math.min(2,devicePixelRatio||1);
+  W=cv.clientWidth;H=cv.clientHeight;
+  cv.width=W*d;cv.height=H*d;cx.setTransform(d,0,0,d,0,0);
+  layoutOverlays();draw();
+}
+addEventListener('resize',resize);
+const PX=x=>x*S.view.s+S.view.ox, PY=y=>S.view.oy-y*S.view.s;
+const WX=sx=>(sx-S.view.ox)/S.view.s, WY=sy=>(S.view.oy-sy)/S.view.s;
+const snapv=v=>S.snap>0?Math.round(v/S.snap)*S.snap:v;
+function fitView(){
+  const bb=egBB();
+  S.view.s=Math.min(W/(bb.x1-bb.x0||1),H/(bb.y1-bb.y0||1))*0.86;
+  S.view.ox=W/2-((bb.x0+bb.x1)/2)*S.view.s;
+  S.view.oy=H/2+((bb.y0+bb.y1)/2)*S.view.s;
+  const cxx=(bb.x0+bb.x1)/2, cyy=(bb.y0+bb.y1)/2;
+  S.cam.tx=cxx;S.cam.ty=cyy;S.cam.tz=egAt(cxx,cyy)*S.vex;
+  S.cam.dist=Math.max(bb.x1-bb.x0,bb.y1-bb.y0)*1.8;
+  draw();
+}
+/* colour ramp: red cuts, green fills, quiet in the middle (Civil 3D convention) */
+function cfRGB(d,out){
+  const a=Math.abs(d);
+  if(a<=DEAD)return false;
+  const t=a<2.5?a/2.5:1;
+  if(d<0){out[0]=(190+60*t)|0;out[1]=(120-90*t)|0;out[2]=(95-70*t)|0;}
+  else{out[0]=(120-80*t)|0;out[1]=(175+45*t)|0;out[2]=(110-60*t)|0;}
+  return true;
+}
+const _c3=[0,0,0];
+function cfColour(d){return cfRGB(d,_c3)?`rgb(${_c3[0]},${_c3[1]},${_c3[2]})`:null;}
+function drawPlan(){
+  const C=S.cache;
+  if(!C){return;}
+  // ground as a soft base
+  const bb=egBB();
+  cx.fillStyle='#171c22';
+  cx.fillRect(PX(bb.x0),PY(bb.y1),(bb.x1-bb.x0)*S.view.s,(bb.y1-bb.y0)*S.view.s);
+  // cut / fill wash, painted through an offscreen image so it stays quick
+  if(S.showCF){
+    if(!S.cfImg||S.cfDirty){
+      const off=document.createElement('canvas');off.width=C.nx;off.height=C.ny;
+      const oc=off.getContext('2d'), img=oc.createImageData(C.nx,C.ny), D=img.data;
+      for(let j=0;j<C.ny;j++){
+        const src=j*C.nx, dst=(C.ny-1-j)*C.nx;
+        for(let i=0;i<C.nx;i++){
+          const bs=S.egStrip;
+          if(!cfRGB(S.fg[src+i]-bs[src+i],_c3))continue;
+          const k=(dst+i)*4;
+          D[k]=_c3[0];D[k+1]=_c3[1];D[k+2]=_c3[2];D[k+3]=200;
+        }
+      }
+      oc.putImageData(img,0,0);S.cfImg=off;S.cfDirty=false;
+    }
+    cx.imageSmoothingEnabled=true;cx.imageSmoothingQuality='high';
+    cx.drawImage(S.cfImg,PX(C.x0),PY(C.y0+(C.ny-1)*C.cell),
+      (C.nx-1)*C.cell*S.view.s,(C.ny-1)*C.cell*S.view.s);
+  }
+  // site grid, so distances can be read straight off the plan
+  if(S.showGrid){
+    const bb=egBB(), sp=S.gridSp;
+    cx.strokeStyle='rgba(255,255,255,.13)';cx.lineWidth=1;
+    cx.beginPath();
+    for(let x=Math.ceil(bb.x0/sp)*sp;x<=bb.x1;x+=sp){cx.moveTo(PX(x),PY(bb.y0));cx.lineTo(PX(x),PY(bb.y1));}
+    for(let y=Math.ceil(bb.y0/sp)*sp;y<=bb.y1;y+=sp){cx.moveTo(PX(bb.x0),PY(y));cx.lineTo(PX(bb.x1),PY(y));}
+    cx.stroke();
+    if(S.view.s>2.2){
+      cx.fillStyle='rgba(200,215,230,.5)';cx.font='9px ui-monospace,monospace';
+      for(let x=Math.ceil(bb.x0/sp)*sp;x<=bb.x1;x+=sp)cx.fillText(x.toFixed(0),PX(x)+2,PY(bb.y1)+11);
+      for(let y=Math.ceil(bb.y0/sp)*sp;y<=bb.y1;y+=sp)cx.fillText(y.toFixed(0),PX(bb.x0)+2,PY(y)-3);
+    }
+  }
+  // existing ground contours
+  if(S.egCont){
+    cx.setLineDash([6,5]);
+    for(const c of S.egCont){
+      cx.strokeStyle=c.major?'rgba(120,205,255,.85)':'rgba(110,180,225,.5)';
+      cx.lineWidth=c.major?1.3:0.8;
+      cx.beginPath();
+      for(const sg of c.segs){cx.moveTo(PX(sg[0].x),PY(sg[0].y));cx.lineTo(PX(sg[1].x),PY(sg[1].y));}
+      cx.stroke();
+    }
+    cx.setLineDash([]);
+  }
+  // design contours
+  if(S.cont){
+    for(const c of S.cont){
+      cx.strokeStyle=c.major?'rgba(24,20,10,.85)':'rgba(40,34,20,.5)';
+      cx.lineWidth=c.major?1.5:0.8;
+      cx.beginPath();
+      for(const s of c.segs){cx.moveTo(PX(s[0].x),PY(s[0].y));cx.lineTo(PX(s[1].x),PY(s[1].y));}
+      cx.stroke();
+    }
+  }
+  // pads
+  S.pads.forEach((p,i)=>{
+    if(!p.pts.length)return;
+    const on=i===S.active;
+    cx.beginPath();
+    p.pts.forEach((q,k)=>k?cx.lineTo(PX(q.x),PY(q.y)):cx.moveTo(PX(q.x),PY(q.y)));
+    if(p.pts.length>2)cx.closePath();
+    cx.fillStyle=S.padFill?(on?p.col+'d0':p.col+'b0'):(on?p.col+'26':p.col+'14');
+    if(p.pts.length>2)cx.fill();
+    cx.strokeStyle=on?p.col:p.col+'99';cx.lineWidth=on?2.4:1.4;cx.stroke();
+    // overall fall arrow, taken from the corner levels as they actually are
+    if(p.pts.length>2){
+      const f=padFall(p), th=f.dir*Math.PI/180, L=Math.min(22,S.view.s*5);
+      const ax=PX(p.cx),ay=PY(p.cy),dx=Math.sin(th)*L,dy=-Math.cos(th)*L;
+      cx.strokeStyle=on?'#ffe08a':'#ffe08a77';cx.lineWidth=1.5;
+      cx.beginPath();cx.moveTo(ax-dx,ay-dy);cx.lineTo(ax+dx,ay+dy);cx.stroke();
+      cx.beginPath();cx.moveTo(ax+dx,ay+dy);
+      cx.lineTo(ax+dx-dx*0.35-dy*0.22,ay+dy-dy*0.35+dx*0.22);
+      cx.lineTo(ax+dx-dx*0.35+dy*0.22,ay+dy-dy*0.35-dx*0.22);
+      cx.closePath();cx.fillStyle=on?'#ffe08a':'#ffe08a77';cx.fill();
+      cx.font='11px system-ui';cx.textAlign='center';
+      if(S.padFill){cx.fillStyle='#0d1218cc';const tw=cx.measureText(p.name+'   '+f.grade.toFixed(2)+'%').width+8;
+        cx.fillRect(ax-tw/2,ay-22,tw,15);}
+      cx.fillStyle=on?'#fff6df':'#fff6df99';
+      cx.fillText(p.name+'   '+f.grade.toFixed(2)+'%',ax,ay-13);
+      cx.textAlign='left';
+    }
+    // string grades along every edge of the pad being worked on
+    if(on&&p.pts.length>1){
+      cx.font='10px ui-monospace,monospace';cx.textAlign='center';
+      for(let e=0;e<p.pts.length;e++){
+        const A=p.pts[e],B=p.pts[(e+1)%p.pts.length];
+        if(p.pts.length===2&&e===1)break;
+        const mx=(PX(A.x)+PX(B.x))/2, my=(PY(A.y)+PY(B.y))/2;
+        const g=edgeGrade(p,e), lit=S.sel.kind==='edge'&&S.sel.i===e;
+        if(lit){
+          cx.strokeStyle='#ffffff';cx.lineWidth=3.5;
+          cx.beginPath();cx.moveTo(PX(A.x),PY(A.y));cx.lineTo(PX(B.x),PY(B.y));cx.stroke();
+        }
+        const txt=edgeLen(p,e).toFixed(1)+' m   '+(g>=0?'+':'−')+Math.abs(g).toFixed(2)+'%';
+        cx.fillStyle='#0d1218cc';
+        const w=cx.measureText(txt).width+6;
+        cx.fillRect(mx-w/2,my-7,w,13);
+        cx.fillStyle=lit?'#ffffff':(g>0.001?'#8fd07a':g<-0.001?'#f0937a':'#c3ccd6');
+        cx.fillText(txt,mx,my+3);
+      }
+      cx.textAlign='left';
+    }
+    // corner grips with their design levels
+    if(on)p.pts.forEach((q,k)=>{
+      const X=PX(q.x),Y=PY(q.y);
+      const lit=(S.sel.kind==='corner'&&S.sel.i===k)||k===S.pick;
+      // on a selected string: green stake where the grade starts, red where it ends
+      const se=S.sel.kind==='edge'?S.sel.i:-1;
+      const start=se>=0&&k===se, end=se>=0&&k===(se+1)%p.pts.length;
+      const r=(lit||start||end)?6:4;
+      if(start||end){
+        cx.fillStyle=start?'#4ad66d':'#e0553b';
+        cx.beginPath();cx.arc(X,Y,r,0,6.2832);cx.fill();
+        cx.strokeStyle='#0b0f14';cx.lineWidth=1.5;cx.stroke();
+      }else{
+        cx.fillStyle=lit?'#ffffff':'#ffd166';
+        cx.fillRect(X-r,Y-r,r*2,r*2);
+        cx.strokeStyle='#4a3600';cx.lineWidth=1;cx.strokeRect(X-r,Y-r,r*2,r*2);
+      }
+      cx.fillStyle=start?'#bdf2c9':end?'#ffc4b4':lit?'#ffffff':'#fff6df';
+      cx.font=((lit||start||end)?'bold ':'')+'10px ui-monospace,monospace';
+      cx.fillText(q.z.toFixed(3),X+r+3,Y-r-1);
+    });
+  });
+  // snapped cursor
+  if(S.hover&&S.tool!=='select'){
+    const X=PX(S.hover.x),Y=PY(S.hover.y);
+    cx.strokeStyle='#ffffffcc';cx.lineWidth=1;
+    cx.beginPath();cx.moveTo(X-8,Y);cx.lineTo(X+8,Y);cx.moveTo(X,Y-8);cx.lineTo(X,Y+8);cx.stroke();
+  }
+}
+/* simple dimetric 3D so the batters can be sanity-checked by eye */
+function proj3(x,y,z){
+  const c=S.cam, dx=x-c.tx, dy=y-c.ty, dz=z*S.vex-c.tz;
+  const ca=Math.cos(c.az),sa=Math.sin(c.az);
+  const x1=dx*ca-dy*sa, y1=dx*sa+dy*ca;
+  const ce=Math.cos(c.el),se=Math.sin(c.el);
+  const y2=y1*ce-dz*se, z2=y1*se+dz*ce, d=y2+c.dist;
+  if(d<=1e-6)return null;
+  const k=(H*1.15)/d;
+  return {x:W/2+x1*k, y:H/2-z2*k, d};
+}
+function draw3D(){
+  const C=S.cache; if(!C)return;
+  const step=Math.max(1,Math.round(1.6/C.cell));      // ~1.6 m display mesh
+  const tris=[];
+  for(let j=0;j+step<C.ny;j+=step)for(let i=0;i+step<C.nx;i+=step){
+    const x=C.x0+i*C.cell, y=C.y0+j*C.cell, s=step*C.cell;
+    const kA=j*C.nx+i, kB=j*C.nx+i+step, kC=(j+step)*C.nx+i+step, kD=(j+step)*C.nx+i;
+    const zA=S.fg[kA],zB=S.fg[kB],zC=S.fg[kC],zD=S.fg[kD];
+    const pA=proj3(x,y,zA),pB=proj3(x+s,y,zB),pC=proj3(x+s,y+s,zC),pD=proj3(x,y+s,zD);
+    if(!pA||!pB||!pC||!pD)continue;
+    const bs=S.egStrip;
+    const dz=((zA+zC)/2)-((bs[kA]+bs[kC])/2);
+    if(!S.showCF||!cfRGB(dz,_c3)){_c3[0]=150;_c3[1]=140;_c3[2]=110;}
+    if(S.padFill){                              // tint the quad with its pad's colour
+      const mx=x+s/2,my=y+s/2;
+      const pf=S.pads.find(q=>q.pts.length>2&&inPoly(mx,my,q.pts));
+      if(pf){const h=pf.col;_c3[0]=parseInt(h.slice(1,3),16);_c3[1]=parseInt(h.slice(3,5),16);_c3[2]=parseInt(h.slice(5,7),16);}
+    }
+    const nx=(zA+zD-zB-zC)/2, ny=(zA+zB-zD-zC)/2;
+    const L=Math.hypot(nx,ny,1);
+    const sh=Math.max(.5,Math.min(1.25,(nx*0.42-ny*0.5+0.76)/L+0.42));
+    const r=Math.min(255,_c3[0]*sh)|0,g2=Math.min(255,_c3[1]*sh)|0,b2=Math.min(255,_c3[2]*sh)|0;
+    // contour crossings inside this quad, so they drape and occlude correctly
+    let cl=null;
+    if(S.cInt>0&&!drag&&(S.showFgCont||S.showEgCont)){
+      const mk=(za,zb,zc,zd,arr,col)=>{
+        let lo=Math.min(za,zb,zc,zd),hi=Math.max(za,zb,zc,zd);
+        if(hi-lo<1e-4)return;
+        for(let n=Math.ceil(lo/S.cInt);n<=Math.floor(hi/S.cInt);n++){
+          const zz=n*S.cInt;
+          const e=[];
+          const ip=(p1,p2,v1,v2)=>{const t=(zz-v1)/((v2-v1)||1e-9);
+            return {x:p1.x+(p2.x-p1.x)*t,y:p1.y+(p2.y-p1.y)*t};};
+          if((za>zz)!==(zb>zz))e.push(ip(pA,pB,za,zb));
+          if((zb>zz)!==(zc>zz))e.push(ip(pB,pC,zb,zc));
+          if((zc>zz)!==(zd>zz))e.push(ip(pC,pD,zc,zd));
+          if((zd>zz)!==(za>zz))e.push(ip(pD,pA,zd,za));
+          if(e.length>=2)arr.push([e[0],e[1],n%5===0,col]);
+        }
+      };
+      cl=[];
+      if(S.showFgCont)mk(zA,zB,zC,zD,cl,'fg');
+      if(S.showEgCont)mk(C.eg[kA],C.eg[kB],C.eg[kC],C.eg[kD],cl,'eg');
+      if(!cl.length)cl=null;
+    }
+    tris.push({d:(pA.d+pC.d)/2,p:[pA,pB,pC,pD],c:`rgb(${r},${g2},${b2})`,cl});
+  }
+  tris.sort((a,b)=>b.d-a.d);
+  for(const t of tris){
+    cx.beginPath();cx.moveTo(t.p[0].x,t.p[0].y);
+    for(let k=1;k<4;k++)cx.lineTo(t.p[k].x,t.p[k].y);
+    cx.closePath();cx.fillStyle=t.c;cx.fill();
+    if(t.cl)for(const [a,bq,major,kind] of t.cl){
+      if(kind==='eg'){cx.setLineDash([5,4]);cx.strokeStyle=major?'rgba(120,205,255,.9)':'rgba(110,180,225,.55)';}
+      else{cx.setLineDash([]);cx.strokeStyle=major?'rgba(24,20,10,.9)':'rgba(40,34,20,.55)';}
+      cx.lineWidth=major?1.4:0.8;
+      cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(bq.x,bq.y);cx.stroke();
+    }
+    cx.setLineDash([]);
+  }
+  // pad outlines draped on the design
+  S.pads.forEach((p,i)=>{
+    if(p.pts.length<3)return;
+    cx.strokeStyle=i===S.active?p.col:p.col+'aa';cx.lineWidth=2;
+    cx.beginPath();
+    p.pts.forEach((q,k)=>{
+      const pt=proj3(q.x,q.y,q.z); if(!pt)return;
+      k?cx.lineTo(pt.x,pt.y):cx.moveTo(pt.x,pt.y);
+    });
+    cx.closePath();cx.stroke();
+  });
+}
+function draw(){
+  cx.clearRect(0,0,W,H);
+  cx.fillStyle='#0a0e12';cx.fillRect(0,0,W,H);
+  if(!S.cache){cx.fillStyle='#5d6773';cx.font='13px system-ui';cx.textAlign='center';
+    cx.fillText('…',W/2,H/2);cx.textAlign='left';return;}
+  if(S.mode==='plan')drawPlan(); else draw3D();
+  if(S.sect)drawSection();
+}
+
+/* ─────────────── section checker ───────────────
+   Four surfaces to read against each other: the finished design, the subgrade
+   the bulk earthworks are taken to, natural ground, and ground after strip.  */
+const scv=$('scv'), sx2=scv.getContext('2d');
+function sampleGrid(arr,x,y){
+  const C=S.cache;
+  const fx=(x-C.x0)/C.cell, fy=(y-C.y0)/C.cell;
+  const i=Math.max(0,Math.min(C.nx-2,Math.floor(fx))), j=Math.max(0,Math.min(C.ny-2,Math.floor(fy)));
+  const u=Math.max(0,Math.min(1,fx-i)), v=Math.max(0,Math.min(1,fy-j));
+  const a=arr[j*C.nx+i],b=arr[j*C.nx+i+1],c=arr[(j+1)*C.nx+i],d=arr[(j+1)*C.nx+i+1];
+  return a*(1-u)*(1-v)+b*u*(1-v)+c*(1-u)*v+d*u*v;
+}
+function sectionData(){
+  if(!S.sect||!S.cache)return null;
+  const {ax,ay,bx,by}=S.sect;
+  const L=Math.hypot(bx-ax,by-ay); if(L<1)return null;
+  const step=Math.max(S.cache.cell/2,L/600), n=Math.max(2,Math.ceil(L/step));
+  const ch=[],fin=[],sub=[],eg=[],st=[];
+  for(let k=0;k<=n;k++){
+    const t=k/n, x=ax+(bx-ax)*t, y=ay+(by-ay)*t;
+    ch.push(L*t);
+    fin.push(sampleGrid(S.fgFin,x,y));
+    sub.push(sampleGrid(S.fgBulk,x,y));
+    eg.push(sampleGrid(S.cache.eg,x,y));
+    st.push(sampleGrid(S.egStrip,x,y));
+  }
+  return {L,ch,fin,sub,eg,st};
+}
+function drawSection(){
+  const box=$('sect');
+  if(!S.sect){box.classList.add('hide');$('foot').style.bottom=$('note').style.bottom='9px';return;}
+  box.classList.remove('hide');
+  // keep the cursor readout and the message clear of the section strip
+  const lift=(box.offsetHeight||216)+10+'px';
+  $('foot').style.bottom=$('note').style.bottom=lift;
+  const d=sectionData(); if(!d)return;
+  const dpr=Math.min(2,devicePixelRatio||1);
+  const w=scv.clientWidth,h=scv.clientHeight;
+  scv.width=w*dpr;scv.height=h*dpr;sx2.setTransform(dpr,0,0,dpr,0,0);
+  sx2.clearRect(0,0,w,h);
+  const on=S.sShow;
+  const sets=[];
+  if(on.eg)sets.push(d.eg); if(on.strip)sets.push(d.st);
+  if(on.fin)sets.push(d.fin); if(on.sub)sets.push(d.sub);
+  if(!sets.length){sx2.fillStyle='#5d6773';sx2.font='12px system-ui';sx2.textAlign='center';
+    sx2.fillText(T('Tick a surface to see it'),w/2,h/2);sx2.textAlign='left';return;}
+  let lo=Infinity,hi=-Infinity;
+  for(const a of sets)for(const v of a){if(v<lo)lo=v;if(v>hi)hi=v;}
+  const pad=Math.max(0.25,(hi-lo)*0.15); lo-=pad; hi+=pad;
+  const ml=52,mr=12,mt=8,mb=20;
+  const X=c=>ml+(c/d.L)*(w-ml-mr), Y=z=>h-mb-((z-lo)/(hi-lo))*(h-mt-mb);
+  // level grid
+  const span=hi-lo, tick=span>20?5:span>8?2:span>4?1:span>1.6?0.5:0.25;
+  sx2.font='10px ui-monospace,monospace';
+  for(let z=Math.ceil(lo/tick)*tick;z<=hi;z+=tick){
+    const y=Y(z);
+    sx2.strokeStyle='#1e2731';sx2.lineWidth=1;
+    sx2.beginPath();sx2.moveTo(ml,y);sx2.lineTo(w-mr,y);sx2.stroke();
+    sx2.fillStyle='#6d7885';sx2.textAlign='right';sx2.fillText(z.toFixed(2),ml-6,y+3);
+  }
+  // chainage marks
+  const cst=d.L>200?50:d.L>80?20:d.L>30?10:5;
+  sx2.textAlign='center';
+  for(let c=0;c<=d.L;c+=cst){
+    const x=X(c);
+    sx2.strokeStyle='#1a222c';sx2.beginPath();sx2.moveTo(x,mt);sx2.lineTo(x,h-mb);sx2.stroke();
+    sx2.fillStyle='#6d7885';sx2.fillText(c.toFixed(0),x,h-6);
+  }
+  sx2.textAlign='left';
+  const line=(arr,col,wid,dash)=>{
+    sx2.strokeStyle=col;sx2.lineWidth=wid;sx2.setLineDash(dash||[]);
+    sx2.beginPath();
+    arr.forEach((z,k)=>k?sx2.lineTo(X(d.ch[k]),Y(z)):sx2.moveTo(X(d.ch[k]),Y(z)));
+    sx2.stroke();sx2.setLineDash([]);
+  };
+  // cut and fill hatch between the two that matter
+  if(on.sub&&on.strip){
+    for(let k=1;k<d.ch.length;k++){
+      const dz=(d.sub[k]-d.st[k]);
+      if(Math.abs(dz)<=DEAD)continue;
+      sx2.fillStyle=dz<0?'rgba(224,110,90,.20)':'rgba(110,190,110,.20)';
+      sx2.beginPath();
+      sx2.moveTo(X(d.ch[k-1]),Y(d.st[k-1]));sx2.lineTo(X(d.ch[k]),Y(d.st[k]));
+      sx2.lineTo(X(d.ch[k]),Y(d.sub[k]));sx2.lineTo(X(d.ch[k-1]),Y(d.sub[k-1]));
+      sx2.closePath();sx2.fill();
+    }
+  }
+  if(on.eg)line(d.eg,'#9fb0c3',1.6);
+  if(on.strip)line(d.st,'#6f8fa8',1.2,[5,4]);
+  if(on.fin)line(d.fin,'#ffd166',2);
+  if(on.sub)line(d.sub,'#f2905c',1.4,[6,3]);
+  $('sectInfo').textContent=d.L.toFixed(1)+' m   ·   '+lo.toFixed(2)+'–'+hi.toFixed(2)+' m';
+}
+addEventListener('resize',()=>{if(S.sect)drawSection();});
+
+/* ─────────────── interaction ─────────────── */
+let drag=null;
+cv.addEventListener('pointerdown',e=>{
+  cv.setPointerCapture(e.pointerId);
+  drag={x:e.offsetX,y:e.offsetY,moved:false,btn:e.button,shift:e.shiftKey,
+    view:{...S.view},cam:{...S.cam}};
+});
+cv.addEventListener('pointermove',e=>{
+  if(!drag){
+    if(S.mode==='plan'){
+      S.hover={x:snapv(WX(e.offsetX)),y:snapv(WY(e.offsetY))};
+      readout(e.offsetX,e.offsetY);
+      if(S.tool!=='select')draw();
+    }
+    return;
+  }
+  const dx=e.offsetX-drag.x, dy=e.offsetY-drag.y;
+  if(Math.abs(dx)>4||Math.abs(dy)>4)drag.moved=true;
+  if(S.mode==='plan'){S.view.ox=drag.view.ox+dx;S.view.oy=drag.view.oy+dy;}
+  else if(drag.btn===2||drag.shift){
+    const k=S.cam.dist/(H*1.15);
+    S.cam.tx=drag.cam.tx-dx*k;S.cam.ty=drag.cam.ty+dy*k;
+  }else{
+    S.cam.az=drag.cam.az+dx*0.008;
+    S.cam.el=Math.max(-1.4,Math.min(1.4,drag.cam.el+dy*0.008));
+  }
+  draw();
+});
+addEventListener('pointerup',()=>{
+  if(drag&&!drag.moved&&drag.btn===0&&S.mode==='plan')padClick(drag.x,drag.y);
+  drag=null;
+});
+cv.addEventListener('contextmenu',e=>e.preventDefault());
+cv.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=Math.exp(-e.deltaY*0.0012);
+  if(S.mode==='plan'){
+    const mx=e.offsetX,my=e.offsetY;
+    S.view.ox=mx-(mx-S.view.ox)*f;S.view.oy=my-(my-S.view.oy)*f;S.view.s*=f;
+  }else S.cam.dist=Math.max(2,S.cam.dist/f);
+  draw();
+},{passive:false});
+function readout(sx,sy){
+  if(!S.cache)return;
+  const x=WX(sx),y=WY(sy),C=S.cache;
+  const i=Math.round((x-C.x0)/C.cell), j=Math.round((y-C.y0)/C.cell);
+  if(i<0||j<0||i>=C.nx||j>=C.ny){$('foot').textContent='';return;}
+  const k=j*C.nx+i, g=C.eg[k], fin=S.fgFin[k], sub=S.fgBulk[k], f=S.fg[k], d=f-g;
+  $('foot').textContent=T('ground ')+g.toFixed(2)+' m   ·   '+T('design ')+fin.toFixed(2)+' m'+
+    (S.hasDepth?'   ·   '+T('subgrade ')+sub.toFixed(2)+' m':'')+'   ·   '+
+    (Math.abs(d)<=DEAD?'—':(d>0?'+':'−')+Math.abs(d).toFixed(2)+' m');
+}
+/** the string of this pad nearest the cursor, with the point on it */
+function nearEdgeOf(p,sx,sy,tol){
+  if(!p||p.pts.length<2)return null;
+  let best=null,bd=tol*tol;
+  for(let i=0;i<p.pts.length;i++){
+    const A=p.pts[i],B=p.pts[(i+1)%p.pts.length];
+    if(p.pts.length===2&&i===1)break;
+    const ax=PX(A.x),ay=PY(A.y),bx=PX(B.x),by=PY(B.y);
+    const dx=bx-ax,dy=by-ay,L=dx*dx+dy*dy;
+    let t=L?((sx-ax)*dx+(sy-ay)*dy)/L:0;t=t<0?0:t>1?1:t;
+    const d=(sx-ax-t*dx)**2+(sy-ay-t*dy)**2;
+    if(d<bd){bd=d;best={i,t,x:A.x+t*(B.x-A.x),y:A.y+t*(B.y-A.y),z:A.z+t*(B.z-A.z)};}
+  }
+  return best;
+}
+function nearCorner(sx,sy,tol){
+  const p=S.pads[S.active]; if(!p)return -1;
+  let best=-1,bd=tol*tol;
+  p.pts.forEach((q,i)=>{
+    const dx=PX(q.x)-sx, dy=PY(q.y)-sy, d=dx*dx+dy*dy;
+    if(d<bd){bd=d;best=i;}
+  });
+  return best;
+}
+/** a walkway or accessway: a narrow pad spanning two points, picking up the
+    level of whichever pad each end lands on so it ties in properly */
+function makeLink(a,bpt){
+  const dx=bpt.x-a.x, dy=bpt.y-a.y, L=Math.hypot(dx,dy);
+  if(L<1){note('That link is too short',true);return;}
+  const w=Math.max(0.5,S.linkW)/2, nx=-dy/L*w, ny=dx/L*w;
+  const levelAt=(x,y)=>{
+    const pi=S.pads.findIndex(q=>q.pts.length>2&&inPoly(x,y,q.pts));
+    if(pi>=0)return padZ(S.pads[pi],x,y);
+    let best=null,bd=Infinity;
+    S.pads.forEach(q=>{if(q.pts.length<2)return;const n=nearestOnPoly(x,y,q.pts);
+      if(n.d2<bd){bd=n.d2;best=n.z;}});
+    return (best!==null&&bd<25)?best:egAt(x,y);
+  };
+  const za=levelAt(a.x,a.y), zb=levelAt(bpt.x,bpt.y);
+  push();
+  const id=++S.nPad;
+  S.pads.push({name:'Link '+id,col:PADCOL[(id-1)%PADCOL.length],cx:0,cy:0,tris:null,depth:0,
+    pts:[{x:+(a.x+nx).toFixed(3),y:+(a.y+ny).toFixed(3),z:+za.toFixed(3)},
+         {x:+(bpt.x+nx).toFixed(3),y:+(bpt.y+ny).toFixed(3),z:+zb.toFixed(3)},
+         {x:+(bpt.x-nx).toFixed(3),y:+(bpt.y-ny).toFixed(3),z:+zb.toFixed(3)},
+         {x:+(a.x-nx).toFixed(3),y:+(a.y-ny).toFixed(3),z:+za.toFixed(3)}]});
+  refreshCentre(S.pads.at(-1));
+  S.active=S.pads.length-1;S.sel={kind:'pad',i:0};
+  rebuild(true);
+  const g=Math.abs((zb-za)/L*100);
+  note('Link made — '+L.toFixed(1)+' m at '+g.toFixed(2)+'%');
+}
+function padClick(sx,sy){
+  const w={x:snapv(WX(sx)),y:snapv(WY(sy))};
+  if(S.tool==='sect'){
+    if(!S.sectA){S.sectA={x:WX(sx),y:WY(sy)};note('Now click the far end of the section');draw();return;}
+    S.sect={ax:S.sectA.x,ay:S.sectA.y,bx:WX(sx),by:WY(sy)};S.sectA=null;
+    drawSection();draw();note('Section cut');
+    return;
+  }
+  if(S.tool==='link'){
+    if(!S.linkA){S.linkA=w;note('Now click the other end of the link');draw();return;}
+    makeLink(S.linkA,w);S.linkA=null;return;
+  }
+  if(S.tool==='select'){
+    const h=hitTest(sx,sy);
+    select(h);
+    if(h)note(S.pads[h.pad].name+' · '+
+      (h.kind==='corner'?T('corner')+' '+(h.i+1):h.kind==='edge'?T('string')+' '+(h.i+1):T('pad')));
+    return;
+  }
+  const p=S.pads[S.active];
+  if(!p){note('Start a pad first',true);return;}
+  if(S.tool==='add'){
+    // land on a string if you clicked one, so it splits into two strings
+    const e=nearEdgeOf(p,sx,sy,11);
+    if(e){
+      push();
+      p.pts.splice(e.i+1,0,{x:+e.x.toFixed(3),y:+e.y.toFixed(3),z:+e.z.toFixed(3)});
+      refreshCentre(p);S.sel={kind:'corner',i:e.i+1};rebuild(true);
+      note('Stake set on the string — it is now two strings');
+      return;
+    }
+    push();w.z=p.pts.length>2?+padZ(p,w.x,w.y).toFixed(3):+egAt(w.x,w.y).toFixed(3);
+    p.pts.push(w);refreshCentre(p);S.sel={kind:'corner',i:p.pts.length-1};rebuild(true);
+  }else if(S.tool==='move'){
+    if(S.pick===-1){
+      const c=nearCorner(sx,sy,13);
+      if(c>=0){S.pick=c;note('Now click where the corner should go');draw();return;}
+      // not on a corner: pick the whole pad up from where you clicked
+      const hit=S.pads.findIndex(q=>q.pts.length>2&&inPoly(WX(sx),WY(sy),q.pts));
+      if(hit<0){note('Click a corner, or inside a pad to move the whole pad',true);return;}
+      S.active=hit;S.pick=-2;S.grab={x:w.x,y:w.y};
+      note('Now click where the pad should go');drawPadList();draw();
+    }else if(S.pick===-2){
+      const dx=w.x-S.grab.x, dy=w.y-S.grab.y;
+      push();p.pts.forEach(q=>{q.x=+(q.x+dx).toFixed(3);q.y=+(q.y+dy).toFixed(3);});
+      S.pick=-1;refreshCentre(p);rebuild(true);
+    }else{
+      push();w.z=p.pts[S.pick].z;p.pts[S.pick]=w;S.pick=-1;refreshCentre(p);rebuild(true);
+    }
+  }else if(S.tool==='del'){
+    const i=nearCorner(sx,sy,13);
+    if(i<0){note('No corner within reach',true);return;}
+    push();p.pts.splice(i,1);refreshCentre(p);S.sel={kind:'pad',i:0};rebuild(true);
+  }
+}
+const HINT={sect:'Click two points to cut a section through the surfaces.',
+  select:'Click a pad to work on it. Drag the view to pan.',
+  add:'Click to drop a corner. Corners snap to the grid.',
+  move:'Click a corner, then click where it should go.',
+  del:'Click a corner to pull it out.'};
+function setTool(t){
+  S.tool=t;S.pick=-1;S.linkA=null;S.sectA=null;
+  ['select','add','move','del','sect'].forEach(k=>$('t-'+k).classList.toggle('on',k===t));
+  $('pLink').classList.toggle('on',t==='link');
+  $('toolhint').textContent=T(HINT[t]);
+  draw();
+}
+
+/* ─── DXF in: closed polylines become pads, so you can bring your own layout ─── */
+function readDXF(text){
+  const L=text.split(/\r?\n/), polys=[];
+  let i=0;
+  while(i<L.length-1){
+    const code=L[i].trim(), val=(L[i+1]||'').trim();
+    if(code==='0'&&val==='LWPOLYLINE'){
+      const pts=[];let z=null;i+=2;
+      while(i<L.length-1&&L[i].trim()!=='0'){
+        const c=L[i].trim();
+        if(c==='38')z=parseFloat(L[i+1]);
+        if(c==='10'){
+          const x=parseFloat(L[i+1]);let y=NaN;
+          for(let k=i+2;k<i+8&&k<L.length-1;k+=2)if(L[k].trim()==='20'){y=parseFloat(L[k+1]);break;}
+          if(isFinite(x)&&isFinite(y))pts.push({x,y,z});
+        }
+        i+=2;
+      }
+      if(pts.length>=3)polys.push(pts);
+      continue;
+    }
+    if(code==='0'&&val==='POLYLINE'){
+      const pts=[];i+=2;
+      while(i<L.length-1){
+        if(L[i].trim()==='0'&&(L[i+1]||'').trim()==='VERTEX'){
+          let x=NaN,y=NaN,z=null;i+=2;
+          while(i<L.length-1&&L[i].trim()!=='0'){
+            const c=L[i].trim();
+            if(c==='10')x=parseFloat(L[i+1]);
+            if(c==='20')y=parseFloat(L[i+1]);
+            if(c==='30')z=parseFloat(L[i+1]);
+            i+=2;
+          }
+          if(isFinite(x)&&isFinite(y))pts.push({x,y,z:isFinite(z)?z:null});
+          continue;
+        }
+        if(L[i].trim()==='0'&&(L[i+1]||'').trim()==='SEQEND'){i+=2;break;}
+        i+=2;
+      }
+      if(pts.length>=3)polys.push(pts);
+      continue;
+    }
+    i+=2;
+  }
+  return polys;
+}
+function padsFromDXF(text){
+  const polys=readDXF(text);
+  if(!polys.length){note('No closed polylines found in that DXF',true);return;}
+  push();
+  for(const raw of polys){
+    // drop a repeated closing point
+    const pts=raw.slice();
+    if(pts.length>3&&Math.hypot(pts[0].x-pts.at(-1).x,pts[0].y-pts.at(-1).y)<1e-6)pts.pop();
+    const id=++S.nPad;
+    const p={name:'Pad '+id,col:PADCOL[(id-1)%PADCOL.length],
+      pts:pts.map(q=>({x:q.x,y:q.y,z:q.z!=null&&isFinite(q.z)?q.z:0})),cx:0,cy:0,tris:null};
+    refreshCentre(p);
+    if(!pts.some(q=>q.z!=null&&isFinite(q.z)))          // flat linework: sit it on the ground
+      setPlane(p,+egAt(p.cx,p.cy).toFixed(2),1.5,135);
+    S.pads.push(p);
+  }
+  S.active=S.pads.length-1;S.sel={kind:'pad',i:0};
+  rebuild(true);
+  note(polys.length+' outline(s) imported from DXF');
+}
+
+/* ─────────────── export ─────────────── */
+function save(name,text,mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([text],{type:mime||'text/plain'}));
+  a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1500);
+}
+const safe=s=>String(s).replace(/[^A-Z0-9_-]/gi,'_');
+function exportXML(){
+  if(!S.cache)return;
+  const C=S.cache, res=+($('exRes')||{value:2}).value||2, st=Math.max(1,Math.round(res/C.cell));
+  const which=($('exWhat')||{value:'fin'}).value, SRC=which==='sub'?S.fgBulk:S.fgFin;
+  const id=new Int32Array(C.nx*C.ny).fill(-1), P=[];
+  for(let j=0;j<C.ny;j+=st)for(let i=0;i<C.nx;i+=st){
+    id[j*C.nx+i]=P.length;
+    P.push([C.y0+j*C.cell, C.x0+i*C.cell, SRC[j*C.nx+i]]);
+  }
+  const F=[];
+  for(let j=0;j+st<C.ny;j+=st)for(let i=0;i+st<C.nx;i+=st){
+    const a=id[j*C.nx+i],b=id[j*C.nx+i+st],c=id[(j+st)*C.nx+i+st],d=id[(j+st)*C.nx+i];
+    if(a>=0&&b>=0&&c>=0)F.push([a+1,b+1,c+1]);
+    if(a>=0&&c>=0&&d>=0)F.push([a+1,c+1,d+1]);
+  }
+  const dt=new Date().toISOString();
+  let x='<?xml version="1.0"?>\n<LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2" date="'
+    +dt.slice(0,10)+'" time="'+dt.slice(11,19)+'">\n'
+    +'<Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter"/></Units>\n'
+    +'<Application name="Grading Solver" version="1.0"/>\n'
+    +'<Surfaces><Surface name="'+S.egName+(which==='sub'?' subgrade':' design')+'"><Definition surfType="TIN">\n<Pnts>\n';
+  P.forEach((p,i)=>x+='<P id="'+(i+1)+'">'+p[0].toFixed(4)+' '+p[1].toFixed(4)+' '+p[2].toFixed(4)+'</P>\n');
+  x+='</Pnts>\n<Faces>\n';
+  for(const f of F)x+='<F>'+f[0]+' '+f[1]+' '+f[2]+'</F>\n';
+  x+='</Faces>\n</Definition></Surface></Surfaces>\n</LandXML>\n';
+  save(safe(S.egName)+(which==='sub'?'-subgrade':'-design')+'.xml',x,'application/xml');
+  note('LandXML written — '+P.length+' points, '+F.length+' triangles');
+}
+/** Dev: the whole working state, so it can be looked at offline. */
+function exportDev(){
+  const C=S.cache;
+  const d={
+    meta:{tool:'grading-solver',version:'gs-r2',when:new Date().toISOString()},
+    site:{name:S.egName,nx:S.eg.nx,ny:S.eg.ny,cell:S.eg.cell,x0:S.eg.x0,y0:S.eg.y0,
+          z:Array.from(S.eg.z,v=>+v.toFixed(3))},
+    pads:S.pads.map(p=>({name:p.name,cx:+p.cx.toFixed(3),cy:+p.cy.toFixed(3),
+      fall:padFall(p),area:+padArea(p).toFixed(1),depth:p.depth||0,
+      col:p.col,
+      pts:p.pts.map(q=>({x:+q.x.toFixed(3),y:+q.y.toFixed(3),z:+q.z.toFixed(3),
+        eg:+egAt(q.x,q.y).toFixed(3)})),
+      grades:p.pts.map((_,i)=>+edgeGrade(p,i).toFixed(3))})),
+    design:{batterCut:S.bCut,batterFill:S.bFill,gridCell:S.cell,contour:S.cInt,
+      topsoilStrip:S.strip,showEgContours:S.showEgCont,siteGrid:S.showGrid?S.gridSp:0},
+    view:{mode:S.mode,tool:S.tool,active:S.active,sel:S.sel,section:S.sect,
+      sectionShow:S.sShow,vex:S.vex},
+    volume:{topsoilExtent:+S.volStrip.toFixed(1),topsoilSite:+S.volStripAll.toFixed(1),
+      bulk:S.volBulk?{cut:+S.volBulk.cut.toFixed(1),fill:+S.volBulk.fill.toFixed(1),net:+S.volBulk.net.toFixed(1)}:null},
+    grid:C?{nx:C.nx,ny:C.ny,cell:C.cell,x0:C.x0,y0:C.y0}:null,
+  };
+  save(safe(S.egName)+'-grading-state.json',JSON.stringify(d),'application/json');
+  note('State exported — send me the file');
+}
+function exportDXF(){
+  if(!S.cache)return;
+  const C=S.cache, o=[], G=(c,v)=>{o.push(c,v)};
+  const layers=[['PAD-OUTLINE',2],['PAD-LEVELS',3],['DESIGN-CONTOUR',8],
+    ['DESIGN-CONTOUR-INDEX',7],['CUTFILL',1],['LEGEND',7]];
+  G(0,'SECTION');G(2,'TABLES');G(0,'TABLE');G(2,'LAYER');G(70,layers.length);
+  for(const [n,c] of layers){G(0,'LAYER');G(2,n);G(70,'0');G(62,c);G(6,'CONTINUOUS');}
+  G(0,'ENDTAB');G(0,'ENDSEC');G(0,'SECTION');G(2,'ENTITIES');
+  // cut / fill blocks, merged along rows to keep the file small
+  const step=Math.max(1,Math.round(1/C.cell)), cs=step*C.cell;
+  const band=d=>Math.abs(d)<=DEAD?null:(d<0?Math.min(3,Math.ceil(-d/1)):-Math.min(3,Math.ceil(d/1)));
+  const bcol=b=>b>0?[0,11,12,13][b]||12:[0,90,92,94][-b]||92;
+  let solids=0;
+  for(let j=0;j<C.ny-step;j+=step){
+    let run=-99,i0=0;
+    const flush=(iEnd)=>{
+      if(run===-99||run===null)return;
+      const x0=C.x0+i0*C.cell, x1=C.x0+(iEnd+step)*C.cell;
+      const y0=C.y0+j*C.cell, y1=y0+cs;
+      G(0,'SOLID');G(8,'CUTFILL');G(62,bcol(run));
+      G(10,x0.toFixed(3));G(20,y0.toFixed(3));G(30,'0');
+      G(11,x1.toFixed(3));G(21,y0.toFixed(3));G(31,'0');
+      G(12,x0.toFixed(3));G(22,y1.toFixed(3));G(32,'0');
+      G(13,x1.toFixed(3));G(23,y1.toFixed(3));G(33,'0');
+      solids++;
+    };
+    for(let i=0;i<C.nx-step;i+=step){
+      const k=j*C.nx+i, b=band(S.fg[k]-C.eg[k]);
+      if(b!==run){flush(i-step);run=b;i0=i;}
+    }
+    flush(C.nx-1-step);
+  }
+  // design contours
+  if(S.cont)for(const c of S.cont){
+    const lay=c.major?'DESIGN-CONTOUR-INDEX':'DESIGN-CONTOUR';
+    for(const s of c.segs){
+      G(0,'LINE');G(8,lay);
+      G(10,s[0].x.toFixed(3));G(20,s[0].y.toFixed(3));G(30,c.z.toFixed(3));
+      G(11,s[1].x.toFixed(3));G(21,s[1].y.toFixed(3));G(31,c.z.toFixed(3));
+    }
+  }
+  // pads with corner levels
+  const th=Math.max(0.4,(egBB().x1-egBB().x0)/220);
+  for(const p of S.pads){
+    if(p.pts.length<3)continue;
+    // a 3D polyline, so the corner levels travel with the outline and it can be
+    // brought into CAD as a feature line rather than flat linework
+    G(0,'POLYLINE');G(8,'PAD-OUTLINE');G(66,'1');G(70,'9');   // 1=closed  8=3D
+    G(10,'0');G(20,'0');G(30,'0');
+    for(const q of p.pts){
+      G(0,'VERTEX');G(8,'PAD-OUTLINE');G(70,'32');
+      G(10,q.x.toFixed(3));G(20,q.y.toFixed(3));G(30,q.z.toFixed(3));
+    }
+    G(0,'SEQEND');G(8,'PAD-OUTLINE');
+    for(const q of p.pts){
+      G(0,'TEXT');G(8,'PAD-LEVELS');
+      G(10,(q.x+th*0.4).toFixed(3));G(20,(q.y+th*0.4).toFixed(3));G(30,'0');
+      G(40,th.toFixed(3));G(1,q.z.toFixed(3));
+    }
+    G(0,'TEXT');G(8,'PAD-LEVELS');G(10,p.cx.toFixed(3));G(20,p.cy.toFixed(3));G(30,'0');
+    G(40,(th*1.3).toFixed(3));G(72,'1');G(11,p.cx.toFixed(3));G(21,p.cy.toFixed(3));G(31,'0');
+    G(1,p.name+'  '+padFall(p).grade.toFixed(2)+'%');
+  }
+  // legend
+  const bb=egBB();
+  let ly=bb.y1, lx=bb.x1+ (bb.x1-bb.x0)*0.05;
+  const txt=(t,h)=>{G(0,'TEXT');G(8,'LEGEND');G(10,lx.toFixed(3));G(20,ly.toFixed(3));G(30,'0');
+    G(40,(h||th).toFixed(3));G(1,t);ly-=th*2;};
+  txt('GRADING — '+S.egName,th*1.6);
+  txt('Cut '+Math.round(S.vol.cut)+' m3');
+  txt('Fill '+Math.round(S.vol.fill)+' m3');
+  txt('Net '+(S.vol.net>=0?'import ':'to waste ')+Math.abs(Math.round(S.vol.net))+' m3');
+  txt('Batters  cut 1V:'+S.bCut+'   fill 1V:'+S.bFill);
+  for(const p of S.pads)if(p.pts.length>2)
+    txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+Math.round(padArea(p))+' m2');
+  G(0,'ENDSEC');G(0,'EOF');
+  let out='';for(let i=0;i<o.length;i+=2)out+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
+  save(safe(S.egName)+'-grading.dxf',out,'application/dxf');
+  note('DXF written — '+solids+' cut/fill blocks, '+S.pads.length+' pads');
+}
+
+/* ─────────────── set up ─────────────── */
+function startDemo(){
+  S.eg=demoGround();S.egName='demo site';
+  $('site').textContent=T('demo site');
+  S.pads=[];S.nPad=0;
+  S.pads.push(newPad(24,58,58,36,1.0,135));    // sports hall pad
+  S.pads[0].name='Sports hall';
+  S.pads.push(newPad(96,26,62,44,1.8,135));     // carpark
+  S.pads[1].name='Carpark';
+  S.active=0;
+  UND.length=0;RED.length=0;
+  S.cfDirty=true;rebuild(true);
+  balancePad(0);balancePad(1);
+  syncPadInputs();fitView();
+}
+function markDirty(){S.cfDirty=true;}
+const wrapRebuild=rebuild;
+rebuild=function(g){markDirty();wrapRebuild(g);};
+
+$('pAdd').onclick=()=>{
+  push();
+  const bb=egBB(), w=Math.max(1,+$('nW').value||40), l=Math.max(1,+$('nL').value||28);
+  const p=newPad(bb.x0+(bb.x1-bb.x0)*0.5-w/2,bb.y0+(bb.y1-bb.y0)*0.5-l/2,w,l,1.5,135);
+  S.pads.push(p);S.active=S.pads.length-1;S.sel={kind:'pad',i:0};rebuild(true);
+};
+$('pDel').onclick=()=>{
+  if(S.pads.length<=0)return;
+  push();S.pads.splice(S.active,1);S.active=Math.max(0,S.active-1);
+  S.sel={kind:'pad',i:0};rebuild(true);
+};
+
+['select','add','move','del','sect'].forEach(t=>$('t-'+t).onclick=()=>setTool(t));
+$('uUndo').onclick=undo;$('uRedo').onclick=redo;
+$('bCut').onchange=e=>{S.bCut=Math.max(0.5,+e.target.value||2);rebuild(true);};
+$('bFill').onchange=e=>{S.bFill=Math.max(0.5,+e.target.value||3);rebuild(true);};
+$('gCell').onchange=e=>{S.cell=+e.target.value;rebuild(true);};
+$('cInt').onchange=e=>{S.cInt=+e.target.value;rebuild();};
+$('snap').onchange=e=>{S.snap=+e.target.value;};
+$('vPlan').onclick=()=>{S.mode='plan';$('vPlan').classList.add('on');$('v3d').classList.remove('on');draw();};
+$('v3d').onclick=()=>{S.mode='3d';$('v3d').classList.add('on');$('vPlan').classList.remove('on');draw();};
+$('vCF').onclick=()=>{S.showCF=!S.showCF;$('vCF').classList.toggle('on',S.showCF);draw();};
+$('pLink').onclick=()=>{setTool('link');if(S.mode!=='plan')$('vPlan').click();note('Click one pad, then the other');};
+$('nW').onchange=e=>{S.newW=+e.target.value||40;};
+$('nL').onchange=e=>{S.newL=+e.target.value||28;};
+$('lW').onchange=e=>{S.linkW=Math.max(0.5,+e.target.value||1.8);};
+[['sFin','fin'],['sSub','sub'],['sEg','eg'],['sStrip','strip']].forEach(([id,k])=>
+  $(id).onchange=e=>{S.sShow[k]=e.target.checked?1:0;drawSection();});
+$('sectClose').onclick=()=>{S.sect=null;$('sect').classList.add('hide');draw();};
+$('vFill').onclick=()=>{S.padFill=!S.padFill;$('vFill').classList.toggle('on',S.padFill);draw();};
+$('vFgC').onclick=()=>{S.showFgCont=!S.showFgCont;$('vFgC').classList.toggle('on',S.showFgCont);rebuild();};
+$('vEgC').onclick=()=>{S.showEgCont=!S.showEgCont;$('vEgC').classList.toggle('on',S.showEgCont);rebuild();};
+$('vGrid').onclick=()=>{S.showGrid=!S.showGrid;$('vGrid').classList.toggle('on',S.showGrid);draw();};
+$('gridSp').onchange=e=>{S.gridSp=+e.target.value;draw();};
+$('tStrip').onchange=e=>{S.strip=+e.target.value;rebuild();};
+$('exXML').onclick=exportXML;$('exDXF').onclick=exportDXF;
+$('exDev').onclick=exportDev;$('devTop').onclick=exportDev;
+$('demo').onclick=()=>{startDemo();note('Back on the demo site');};
+$('drop').onclick=()=>$('file').click();
+$('file').onchange=e=>{const f=e.target.files[0];if(f)readSurvey(f);e.target.value='';};
+['dragenter','dragover'].forEach(t=>$('drop').addEventListener(t,e=>e.preventDefault()));
+$('drop').addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files[0])readSurvey(e.dataTransfer.files[0]);});
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();if(e.dataTransfer.files[0])readSurvey(e.dataTransfer.files[0]);});
+function readSurvey(f){
+  const r=new FileReader();
+  r.onload=()=>{
+    if(/\.dxf$/i.test(f.name)){padsFromDXF(r.result);return;}
+    let got=null;
+    try{got=loadLandXML(r.result,f.name);}catch(x){note('That file is not readable LandXML',true);return;}
+    if(!got){note('No surface found in that file',true);return;}
+    S.eg=got.g;S.egName=got.name;
+    $('site').textContent=got.name;
+    const bb=egBB();
+    S.pads=[];S.nPad=0;
+    S.pads.push(newPad(bb.x0+(bb.x1-bb.x0)*0.3,bb.y0+(bb.y1-bb.y0)*0.35,
+      Math.min(60,(bb.x1-bb.x0)*0.3),Math.min(40,(bb.y1-bb.y0)*0.3),1.5,135));
+    S.active=0;UND.length=0;RED.length=0;
+    rebuild(true);balancePad(0);syncPadInputs();fitView();
+    note('Survey loaded — '+got.pts.toLocaleString()+' points, '+got.tris.toLocaleString()+' triangles');
+  };
+  r.readAsText(f);
+}
+document.querySelectorAll('.card.fold>h2').forEach(h=>h.onclick=()=>h.parentNode.classList.toggle('shut'));
+addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='SELECT')return;
+  if(e.key==='Escape'&&S.pick>=0){S.pick=-1;draw();}
+  else if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.shiftKey?redo():undo();}
+});
+$('lang').onchange=e=>{applyLang(e.target.value);if(LASTNOTE)note(LASTNOTE);};
+
+$('bCut').value=S.bCut;$('bFill').value=S.bFill;
+let sv='en';try{sv=localStorage.getItem('gradesolver-lang')||'en'}catch(e){}
+$('lang').value=sv;
+resize();
+startDemo();
+applyLang(sv);
+setTool('select');
+note('Drag a pad level, or press Balance to solve the level where cut equals fill');
+</script>
+</body>
+</html>
