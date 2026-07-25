@@ -66,6 +66,10 @@ canvas.pan{cursor:grab}
 .tabs{position:absolute;top:9px;left:9px;display:flex;gap:4px;z-index:4;flex-wrap:wrap;max-width:calc(100% - 220px)}
 .tgap{width:9px}
 .tabs button{background:#0f141bee;border-color:#26303b}
+.tabs button.on{background:linear-gradient(180deg,#ffc23e,#e79a12);color:#241b00;
+  border-top-color:#ffd77a;border-color:#a06d05;box-shadow:0 0 9px #f2b01e66,inset 0 1px 0 #fff6}
+#vPlan.on,#v3d.on{background:linear-gradient(180deg,#5aa9f0,#2f7fc8);color:#04121f;
+  border-top-color:#8fcaff;border-color:#1d5c96;box-shadow:0 0 9px #4a9fe066,inset 0 1px 0 #fff5}
 .bar{position:absolute;top:9px;right:9px;background:#0d1218ee;border:1px solid #26303b;
   border-radius:7px;padding:8px 11px;min-width:172px;max-width:216px;z-index:4}
 .bar .kv{font-size:12.5px}
@@ -124,9 +128,10 @@ canvas.pan{cursor:grab}
           <option value="0.25">0.25 m</option><option value="0.3">0.30 m</option>
         </select>
         <div class="g2">
-          <div><label class="f" id="l-bcut">Cut batter 1V :</label><input type="number" id="bCut" step="0.5" min="0.5"></div>
-          <div><label class="f" id="l-bfill">Fill batter 1V :</label><input type="number" id="bFill" step="0.5" min="0.5"></div>
+          <div><label class="f" id="l-bcut">Default cut batter 1V :</label><input type="number" id="bCut" step="0.5" min="0.5"></div>
+          <div><label class="f" id="l-bfill">Default fill batter 1V :</label><input type="number" id="bFill" step="0.5" min="0.5"></div>
         </div>
+        <p class="hint" id="batHint">Used for new pads. Each pad carries its own batters, set under Grading.</p>
         <div class="g2">
           <div><label class="f" id="l-cint">Contour interval</label>
             <select id="cInt">
@@ -154,6 +159,7 @@ canvas.pan{cursor:grab}
           <option value="1">1.00 m</option>
         </select>
         <p class="hint" id="gridHint">Pad edges land on the nearest half cell, so the box volume runs a little high on a coarse grid — about 4% at 1 m, 1% at 0.25 m.</p>
+        <label class="chk"><input type="checkbox" id="cLab">Contour labels</label>
         <label class="f" id="l-vex">3D vertical exaggeration</label>
         <select id="vex">
           <option value="1">1 ×</option><option value="1.6" selected>1.6 ×</option>
@@ -179,7 +185,7 @@ canvas.pan{cursor:grab}
         <div class="g4">
           <button id="t-select" class="on">◎</button><button id="t-add">⚑</button>
           <button id="t-move">✥</button><button id="t-del">✕</button>
-          <button id="t-sect" style="grid-column:span 2">✂ Section line</button>
+          <button id="t-query">? Query</button><button id="t-sect">✂ Section</button>
           <button id="fitview" style="grid-column:span 2">⤢ Zoom to fit</button>
         </div>
         <p class="hint" id="toolhint">Click a corner, a string or a pad to work on it.</p>
@@ -279,6 +285,16 @@ const TR={
 "＋ Link pads":["＋ Ligar plataformas","＋ Relier les plateformes","＋ Unir plataformas"],
 "All corners":["Todos os cantos","Tous les sommets","Todas las esquinas"],
 "Sets every corner of this pad to one level — a flat pad.":["Coloca todos os cantos desta plataforma na mesma cota — plataforma plana.","Met tous les sommets de cette plateforme au même niveau — plateforme plane.","Pone todas las esquinas de esta plataforma a la misma cota — plataforma plana."],
+"Cut batter 1V :":["Talude de escavação 1V :","Talus de déblai 1V :","Talud de desmonte 1V :"],
+"Fill batter 1V :":["Talude de aterro 1V :","Talus de remblai 1V :","Talud de relleno 1V :"],
+"Default cut batter 1V :":["Talude de escavação padrão 1V :","Talus de déblai par défaut 1V :","Talud de desmonte por defecto 1V :"],
+"Default fill batter 1V :":["Talude de aterro padrão 1V :","Talus de remblai par défaut 1V :","Talud de relleno por defecto 1V :"],
+"Used for new pads. Each pad carries its own batters, set under Grading.":["Usados em novas plataformas. Cada plataforma tem os seus taludes, definidos em Modelação.","Utilisés pour les nouvelles plateformes. Chaque plateforme a ses propres talus, réglés sous Nivellement.","Usados en plataformas nuevas. Cada plataforma tiene sus propios taludes, en Nivelación."],
+"? Query":["? Consultar","? Interroger","? Consultar"],
+"✂ Section":["✂ Perfil","✂ Profil","✂ Perfil"],
+"Click anywhere to read the levels at that point. Click again to move the marker.":["Clique em qualquer ponto para ler as cotas aí. Clique de novo para mover o marcador.","Cliquez n'importe où pour lire les niveaux à cet endroit. Recliquez pour déplacer le repère.","Haga clic en cualquier punto para leer las cotas allí. Vuelva a hacer clic para mover el marcador."],
+"Contour labels":["Etiquetas das curvas","Étiquettes des courbes","Etiquetas de curvas"],
+"Off the site":["Fora do terreno","Hors du site","Fuera del terreno"],
 "Construction depth":["Espessura de construção","Épaisseur de construction","Espesor de construcción"],
 "Bulk earthworks are taken to this depth below the finished surface.":["A movimentação de terras é levada a esta profundidade abaixo da superfície acabada.","Les terrassements sont menés à cette profondeur sous la surface finie.","El movimiento de tierras se lleva a esta profundidad bajo la superficie acabada."],
 "Which surface":["Que superfície","Quelle surface","Qué superficie"],
@@ -488,7 +504,7 @@ const S={
   bCut:2, bFill:3, cell:0.4, cInt:0.25,
   showCF:true, mode:'plan',
   fg:null, fgFin:null, fgBulk:null, cache:null, vol:null, volFin:null, volBulk:null,
-  cont:null, egCont:null, showEgCont:false, showGrid:false, gridSp:10, padFill:false, showFgCont:true, linkW:1.8, newW:40, newL:28,
+  cont:null, egCont:null, showEgCont:false, showGrid:false, gridSp:10, padFill:false, showFgCont:true, cLabels:false, linkW:1.8, newW:40, newL:28,
   strip:0.15, egStrip:null, volStrip:0, sect:null, sShow:{fin:1,sub:1,eg:1,strip:1},
   view:{s:3,ox:0,oy:0}, cam:{az:-0.7,el:0.55,dist:1,tx:0,ty:0,tz:0}, vex:1.6,
   hover:null,
@@ -691,7 +707,8 @@ function padWeights(p,x,y){
 function newPad(x,y,w,h,fall,dir){
   const id=++S.nPad;
   const p={name:'Pad '+id, col:PADCOL[(id-1)%PADCOL.length],
-    pts:[{x,y,z:0},{x:x+w,y,z:0},{x:x+w,y:y+h,z:0},{x,y:y+h,z:0}], cx:0, cy:0, tris:null, depth:0};
+    pts:[{x,y,z:0},{x:x+w,y,z:0},{x:x+w,y:y+h,z:0},{x,y:y+h,z:0}], cx:0, cy:0, tris:null,
+    depth:0, bCut:S.bCut, bFill:S.bFill};
   refreshCentre(p);
   setPlane(p, +egAt(p.cx,p.cy).toFixed(2), fall??1.5, dir??135);
   return p;
@@ -723,7 +740,7 @@ function buildCache(){
   const reach=S.pads.map(p=>{
     let drop=4;
     for(const q of p.pts)drop=Math.max(drop,Math.abs(q.z-egAt(q.x,q.y))+3);
-    return drop*Math.max(S.bCut,S.bFill)+2;
+    return drop*Math.max(p.bCut??S.bCut,p.bFill??S.bFill)+2;
   });
   S.pads.forEach(p=>{p.tris=null;});
   const boxes=S.pads.map((p,i)=>{
@@ -762,6 +779,7 @@ function buildFG(shift,bulk){
   const L=shift||ZEROS;
   const dep=S.pads.map(p=>bulk?(p.depth||0):0);  // dig to underside of pavement or slab
   const PZ=S.pads.map(p=>p.pts.map(q=>q.z));     // corner levels, read once
+  const BC=S.pads.map(p=>p.bCut??S.bCut), BF=S.pads.map(p=>p.bFill??S.bFill);
   const fg=new Float32Array(C.pad.length);
   for(let k=0;k<fg.length;k++){
     const pi=C.pad[k], g=C.eg[k];
@@ -771,8 +789,8 @@ function buildFG(shift,bulk){
     if(C.dist[k]===0){fg[k]=z-dep[pi];continue;}   // in the pad: the box is dug out
     // on the batter: earthworks in natural material, off the finished pad edge, so
     // the box depth plays no part out here
-    if(z>=g)fg[k]=Math.max(z-C.dist[k]/S.bFill, g);
-    else    fg[k]=Math.min(z+C.dist[k]/S.bCut, g);
+    if(z>=g)fg[k]=Math.max(z-C.dist[k]/BF[pi], g);
+    else    fg[k]=Math.min(z+C.dist[k]/BC[pi], g);
   }
   return fg;
 }
@@ -872,6 +890,26 @@ function isolines(grid,iv){
     }
   }
   return finishIso(map,iv);
+}
+/** join contour segments end to end so they can be labelled and exported as
+ *  polylines rather than thousands of separate lines */
+function chainSegs(segs){
+  const key=p=>Math.round(p.x*1000)+'_'+Math.round(p.y*1000);
+  const ends=new Map();
+  segs.forEach((sg,i)=>{for(const q of sg){const k=key(q);let a=ends.get(k);if(!a){a=[];ends.set(k,a);}a.push(i);}});
+  const used=new Uint8Array(segs.length), out=[];
+  const grab=k=>{const a=ends.get(k);if(!a)return -1;for(const j of a)if(!used[j])return j;return -1;};
+  for(let i=0;i<segs.length;i++){
+    if(used[i])continue;
+    used[i]=1;
+    const line=[segs[i][0],segs[i][1]];
+    for(;;){const k=key(line[line.length-1]),j=grab(k);if(j<0)break;used[j]=1;
+      const sg=segs[j];line.push(key(sg[0])===k?sg[1]:sg[0]);}
+    for(;;){const k=key(line[0]),j=grab(k);if(j<0)break;used[j]=1;
+      const sg=segs[j];line.unshift(key(sg[0])===k?sg[1]:sg[0]);}
+    out.push(line);
+  }
+  return out;
 }
 function finishIso(map,iv){
   const out=[];
@@ -1001,6 +1039,12 @@ function drawEditor(){
 
       `<div class="kv"><span>${T('Overall fall')}</span><span>${f.grade.toFixed(2)}% → ${bearing(f.dir)}</span></div>`+
       `<div class="kv"><span>${T('area')}</span><span>${Math.round(padArea(p)).toLocaleString()} m²</span></div>`+
+      `<div class="g2">
+         <div><label class="f">${T('Cut batter 1V :')}</label>
+           <input type="number" id="pbCut" step="0.5" min="0.5" value="${(p.bCut??S.bCut)}"></div>
+         <div><label class="f">${T('Fill batter 1V :')}</label>
+           <input type="number" id="pbFill" step="0.5" min="0.5" value="${(p.bFill??S.bFill)}"></div>
+       </div>`+
       `<label class="f">${T('Construction depth')}</label>`+
       `<div class="row">
          <input type="number" id="pDepth" step="0.05" min="0" value="${(p.depth||0).toFixed(3)}">
@@ -1059,6 +1103,10 @@ function wireEditor(){
   if(pc)pc.oninput=e=>{p.col=e.target.value;drawPadList();draw();};
   const az=$('allSet');
   if(az)az.onclick=()=>{const v=+$('allZ').value||0;push();p.pts.forEach(q=>q.z=+v.toFixed(3));rebuild();};
+  const pbc=$('pbCut');
+  if(pbc)pbc.onchange=e=>{push();p.bCut=Math.max(0.5,+e.target.value||S.bCut);rebuild(true);};
+  const pbf=$('pbFill');
+  if(pbf)pbf.onchange=e=>{push();p.bFill=Math.max(0.5,+e.target.value||S.bFill);rebuild(true);};
   const dp=$('pDepth');
   if(dp)dp.onchange=e=>{push();p.depth=Math.max(0,+e.target.value||0);rebuild();};
   const dpre=$('pDepthPre');
@@ -1141,6 +1189,30 @@ function cfRGB(d,out){
 }
 const _c3=[0,0,0];
 function cfColour(d){return cfRGB(d,_c3)?`rgb(${_c3[0]},${_c3[1]},${_c3[2]})`:null;}
+/** drop the level onto the heavy contours, spaced out so they stay readable */
+function labelContours(set,col,bg){
+  if(!set)return;
+  cx.font='10px ui-monospace,monospace';cx.textAlign='center';cx.textBaseline='middle';
+  for(const c of set){
+    if(!c.major||!c.segs.length)continue;
+    const want=Math.max(1,Math.min(6,Math.floor(c.segs.length/90)+1));
+    const step=Math.max(1,Math.floor(c.segs.length/want));
+    for(let i=Math.floor(step/2);i<c.segs.length;i+=step){
+      const sg=c.segs[i];
+      const ax=PX(sg[0].x),ay=PY(sg[0].y),bx=PX(sg[1].x),by=PY(sg[1].y);
+      if(ax<-40||ax>W+40||ay<-40||ay>H+40)continue;
+      let a=Math.atan2(by-ay,bx-ax);
+      if(a>Math.PI/2)a-=Math.PI; if(a<-Math.PI/2)a+=Math.PI;
+      const t=c.z.toFixed(2), mx=(ax+bx)/2, my=(ay+by)/2;
+      cx.save();cx.translate(mx,my);cx.rotate(a);
+      const w=cx.measureText(t).width+7;
+      cx.fillStyle=bg||'#0d1218';cx.globalAlpha=.85;cx.fillRect(-w/2,-7,w,14);cx.globalAlpha=1;
+      cx.fillStyle=col;cx.fillText(t,0,0);
+      cx.restore();
+    }
+  }
+  cx.textBaseline='alphabetic';cx.textAlign='left';
+}
 function drawPlan(){
   const C=S.cache;
   if(!C){return;}
@@ -1204,6 +1276,7 @@ function drawPlan(){
       cx.stroke();
     }
   }
+  if(S.cLabels){labelContours(S.egCont,'#8fdcff','#0b1a24');labelContours(S.cont,'#ffe6a8','#1c1608');}
   // pads
   S.pads.forEach((p,i)=>{
     if(!p.pts.length)return;
@@ -1274,6 +1347,55 @@ function drawPlan(){
       cx.fillText(q.z.toFixed(3),X+r+3,Y-r-1);
     });
   });
+  // the section, marked up the way a cut line is drawn: green at the start,
+  // red at the end, arrows showing the direction of the cut
+  if(S.sect){
+    const a={x:PX(S.sect.ax),y:PY(S.sect.ay)}, b={x:PX(S.sect.bx),y:PY(S.sect.by)};
+    const dx=b.x-a.x, dy=b.y-a.y, L=Math.hypot(dx,dy)||1, ux=dx/L, uy=dy/L;
+    cx.setLineDash([9,6]);cx.strokeStyle='#ffffffcc';cx.lineWidth=1.8;
+    cx.beginPath();cx.moveTo(a.x,a.y);cx.lineTo(b.x,b.y);cx.stroke();cx.setLineDash([]);
+    const head=(px,py,sx,sy)=>{                       // arrow along the cut
+      cx.beginPath();cx.moveTo(px,py);
+      cx.lineTo(px-sx*13-sy*6,py-sy*13+sx*6);
+      cx.lineTo(px-sx*13+sy*6,py-sy*13-sx*6);
+      cx.closePath();cx.fill();
+    };
+    cx.fillStyle='#ffffff';
+    head(a.x-ux*10,a.y-uy*10,-ux,-uy);
+    head(b.x+ux*10,b.y+uy*10, ux, uy);
+    [[a,'#4ad66d'],[b,'#e0553b']].forEach(([q,c])=>{
+      cx.fillStyle=c;cx.beginPath();cx.arc(q.x,q.y,6,0,6.2832);cx.fill();
+      cx.strokeStyle='#0b0f14';cx.lineWidth=1.6;cx.stroke();
+    });
+    cx.fillStyle='#ffffff';cx.font='10px ui-monospace,monospace';cx.textAlign='center';
+    cx.fillText('A',a.x,a.y-11);cx.fillText("A'",b.x,b.y-11);cx.textAlign='left';
+  }
+  // the query marker
+  if(S.query){
+    const q=S.query, X=PX(q.x), Y=PY(q.y);
+    cx.strokeStyle='#ffd166';cx.lineWidth=1.5;
+    cx.beginPath();cx.moveTo(X-9,Y);cx.lineTo(X+9,Y);cx.moveTo(X,Y-9);cx.lineTo(X,Y+9);cx.stroke();
+    cx.beginPath();cx.arc(X,Y,4,0,6.2832);cx.stroke();
+    const d=q.sub-q.strip;
+    const rows=[[T('Ground'),q.eg.toFixed(3)+' m']];
+    if(q.inWorks&&S.strip>0)rows.push([T('Stripped'),q.strip.toFixed(3)+' m']);
+    rows.push([T('Finished'),q.fin.toFixed(3)+' m']);
+    if(Math.abs(q.fin-q.sub)>0.001)rows.push([T('Subgrade'),q.sub.toFixed(3)+' m']);
+    rows.push([Math.abs(d)<=DEAD?'—':(d>0?T('fill'):T('cut')),
+               (Math.abs(d)<=DEAD?'':(d>0?'+':'−'))+Math.abs(d).toFixed(3)+' m']);
+    if(q.pad)rows.unshift([T('pad'),q.pad]);
+    cx.font='10.5px ui-monospace,monospace';
+    let wmax=0;for(const r of rows)wmax=Math.max(wmax,cx.measureText(r[0]+'   '+r[1]).width);
+    const bw=wmax+16, bh=rows.length*14+10;
+    let bx=X+14, by=Y-bh-10;
+    if(bx+bw>W-6)bx=X-bw-14; if(by<6)by=Y+14;
+    cx.fillStyle='#0d1218f2';cx.strokeStyle='#3a4655';cx.lineWidth=1;
+    cx.beginPath();cx.rect(bx,by,bw,bh);cx.fill();cx.stroke();
+    rows.forEach((r,n)=>{
+      cx.fillStyle='#8d99a8';cx.fillText(r[0],bx+8,by+18+n*14);
+      cx.fillStyle='#e8eef6';cx.textAlign='right';cx.fillText(r[1],bx+bw-8,by+18+n*14);cx.textAlign='left';
+    });
+  }
   // snapped cursor
   if(S.hover&&S.tool!=='select'){
     const X=PX(S.hover.x),Y=PY(S.hover.y);
@@ -1316,7 +1438,7 @@ function draw3D(){
     const r=Math.min(255,_c3[0]*sh)|0,g2=Math.min(255,_c3[1]*sh)|0,b2=Math.min(255,_c3[2]*sh)|0;
     // contour crossings inside this quad, so they drape and occlude correctly
     let cl=null;
-    if(S.cInt>0&&!drag&&(S.showFgCont||S.showEgCont)){
+    if(S.cInt>0&&(S.showFgCont||S.showEgCont)){
       const mk=(za,zb,zc,zd,arr,col)=>{
         let lo=Math.min(za,zb,zc,zd),hi=Math.max(za,zb,zc,zd);
         if(hi-lo<1e-4)return;
@@ -1562,6 +1684,7 @@ function makeLink(a,bpt){
   push();
   const id=++S.nPad;
   S.pads.push({name:'Link '+id,col:PADCOL[(id-1)%PADCOL.length],cx:0,cy:0,tris:null,depth:0,
+    bCut:S.bCut,bFill:S.bFill,
     pts:[{x:+(a.x+nx).toFixed(3),y:+(a.y+ny).toFixed(3),z:+za.toFixed(3)},
          {x:+(bpt.x+nx).toFixed(3),y:+(bpt.y+ny).toFixed(3),z:+zb.toFixed(3)},
          {x:+(bpt.x-nx).toFixed(3),y:+(bpt.y-ny).toFixed(3),z:+zb.toFixed(3)},
@@ -1574,6 +1697,17 @@ function makeLink(a,bpt){
 }
 function padClick(sx,sy){
   const w={x:snapv(WX(sx)),y:snapv(WY(sy))};
+  if(S.tool==='query'){
+    const C=S.cache, x=WX(sx), y=WY(sy);
+    const i=Math.round((x-C.x0)/C.cell), j=Math.round((y-C.y0)/C.cell);
+    if(i<0||j<0||i>=C.nx||j>=C.ny){note('Off the site',true);return;}
+    const k=j*C.nx+i;
+    const pi=S.pads.findIndex(q=>q.pts.length>2&&inPoly(x,y,q.pts));
+    S.query={x,y,eg:C.eg[k],strip:S.egStrip[k],fin:S.fgFin[k],sub:S.fgBulk[k],
+             pad:pi>=0?S.pads[pi].name:null,inWorks:!!S.extent[k]};
+    draw();
+    return;
+  }
   if(S.tool==='sect'){
     if(!S.sectA){S.sectA={x:WX(sx),y:WY(sy)};note('Now click the far end of the section');draw();return;}
     S.sect={ax:S.sectA.x,ay:S.sectA.y,bx:WX(sx),by:WY(sy)};S.sectA=null;
@@ -1628,13 +1762,15 @@ function padClick(sx,sy){
   }
 }
 const HINT={sect:'Click two points to cut a section through the surfaces.',
+  query:'Click anywhere to read the levels at that point. Click again to move the marker.',
   select:'Click a pad to work on it. Drag the view to pan.',
   add:'Click to drop a corner. Corners snap to the grid.',
   move:'Click a corner, then click where it should go.',
   del:'Click a corner to pull it out.'};
 function setTool(t){
   S.tool=t;S.pick=-1;S.linkA=null;S.sectA=null;
-  ['select','add','move','del','sect'].forEach(k=>$('t-'+k).classList.toggle('on',k===t));
+  if(t!=='query')S.query=null;
+  ['select','add','move','del','sect','query'].forEach(k=>$('t-'+k).classList.toggle('on',k===t));
   $('pLink').classList.toggle('on',t==='link');
   $('toolhint').textContent=T(HINT[t]);
   draw();
@@ -1696,7 +1832,8 @@ function padsFromDXF(text){
     if(pts.length>3&&Math.hypot(pts[0].x-pts.at(-1).x,pts[0].y-pts.at(-1).y)<1e-6)pts.pop();
     const id=++S.nPad;
     const p={name:'Pad '+id,col:PADCOL[(id-1)%PADCOL.length],
-      pts:pts.map(q=>({x:q.x,y:q.y,z:q.z!=null&&isFinite(q.z)?q.z:0})),cx:0,cy:0,tris:null};
+      pts:pts.map(q=>({x:q.x,y:q.y,z:q.z!=null&&isFinite(q.z)?q.z:0})),cx:0,cy:0,tris:null,
+      depth:0,bCut:S.bCut,bFill:S.bFill};
     refreshCentre(p);
     if(!pts.some(q=>q.z!=null&&isFinite(q.z)))          // flat linework: sit it on the ground
       setPlane(p,+egAt(p.cx,p.cy).toFixed(2),1.5,135);
@@ -1751,6 +1888,7 @@ function exportDev(){
           z:Array.from(S.eg.z,v=>+v.toFixed(3))},
     pads:S.pads.map(p=>({name:p.name,cx:+p.cx.toFixed(3),cy:+p.cy.toFixed(3),
       fall:padFall(p),area:+padArea(p).toFixed(1),depth:p.depth||0,
+      batterCut:p.bCut??S.bCut,batterFill:p.bFill??S.bFill,
       col:p.col,
       pts:p.pts.map(q=>({x:+q.x.toFixed(3),y:+q.y.toFixed(3),z:+q.z.toFixed(3),
         eg:+egAt(q.x,q.y).toFixed(3)})),
@@ -1798,13 +1936,18 @@ function exportDXF(){
     }
     flush(C.nx-1-step);
   }
-  // design contours
+  // design contours, joined into polylines at their own elevation
+  let cpl=0;
   if(S.cont)for(const c of S.cont){
     const lay=c.major?'DESIGN-CONTOUR-INDEX':'DESIGN-CONTOUR';
-    for(const s of c.segs){
-      G(0,'LINE');G(8,lay);
-      G(10,s[0].x.toFixed(3));G(20,s[0].y.toFixed(3));G(30,c.z.toFixed(3));
-      G(11,s[1].x.toFixed(3));G(21,s[1].y.toFixed(3));G(31,c.z.toFixed(3));
+    for(const line of chainSegs(c.segs)){
+      if(line.length<2)continue;
+      const closed=Math.hypot(line[0].x-line[line.length-1].x,line[0].y-line[line.length-1].y)<1e-6;
+      const pts=closed?line.slice(0,-1):line;
+      if(pts.length<2)continue;
+      G(0,'LWPOLYLINE');G(8,lay);G(90,pts.length);G(70,closed?'1':'0');G(38,c.z.toFixed(3));
+      for(const q of pts){G(10,q.x.toFixed(3));G(20,q.y.toFixed(3));}
+      cpl++;
     }
   }
   // pads with corner levels
@@ -1838,13 +1981,14 @@ function exportDXF(){
   txt('Cut '+Math.round(S.vol.cut)+' m3');
   txt('Fill '+Math.round(S.vol.fill)+' m3');
   txt('Net '+(S.vol.net>=0?'import ':'to waste ')+Math.abs(Math.round(S.vol.net))+' m3');
-  txt('Batters  cut 1V:'+S.bCut+'   fill 1V:'+S.bFill);
+
   for(const p of S.pads)if(p.pts.length>2)
-    txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+Math.round(padArea(p))+' m2');
+    txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+Math.round(padArea(p))+' m2'+
+      '  batter 1V:'+(p.bCut??S.bCut)+'/'+(p.bFill??S.bFill)+(p.depth?'  box '+p.depth.toFixed(2)+'m':''));
   G(0,'ENDSEC');G(0,'EOF');
   let out='';for(let i=0;i<o.length;i+=2)out+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
   save(safe(S.egName)+'-grading.dxf',out,'application/dxf');
-  note('DXF written — '+solids+' cut/fill blocks, '+S.pads.length+' pads');
+  note('DXF written — '+solids+' cut/fill blocks, '+cpl+' contour polylines, '+S.pads.length+' pads');
 }
 
 /* ─────────────── set up ─────────────── */
@@ -1878,7 +2022,7 @@ $('pDel').onclick=()=>{
   S.sel={kind:'pad',i:0};rebuild(true);
 };
 
-['select','add','move','del','sect'].forEach(t=>$('t-'+t).onclick=()=>setTool(t));
+['select','add','move','del','sect','query'].forEach(t=>$('t-'+t).onclick=()=>setTool(t));
 $('uUndo').onclick=undo;$('uRedo').onclick=redo;
 $('bCut').onchange=e=>{S.bCut=Math.max(0.5,+e.target.value||2);rebuild(true);};
 $('bFill').onchange=e=>{S.bFill=Math.max(0.5,+e.target.value||3);rebuild(true);};
@@ -1896,6 +2040,7 @@ $('lW').onchange=e=>{S.linkW=Math.max(0.5,+e.target.value||1.8);};
   $(id).onchange=e=>{S.sShow[k]=e.target.checked?1:0;drawSection();});
 $('sectClose').onclick=()=>{S.sect=null;$('sect').classList.add('hide');draw();};
 $('vFill').onclick=()=>{S.padFill=!S.padFill;$('vFill').classList.toggle('on',S.padFill);draw();};
+$('cLab').onchange=e=>{S.cLabels=e.target.checked;draw();};
 $('vFgC').onclick=()=>{S.showFgCont=!S.showFgCont;$('vFgC').classList.toggle('on',S.showFgCont);rebuild();};
 $('vEgC').onclick=()=>{S.showEgCont=!S.showEgCont;$('vEgC').classList.toggle('on',S.showEgCont);rebuild();};
 $('vGrid').onclick=()=>{S.showGrid=!S.showGrid;$('vGrid').classList.toggle('on',S.showGrid);draw();};
