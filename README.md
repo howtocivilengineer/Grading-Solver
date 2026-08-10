@@ -45,7 +45,7 @@ where you need honest cut/fill and a cost in minutes, not a full corridor model.
 
 ## Video
 
-[▶️ Watch Grading Solver in action on YouTube](https://youtu.be/3GtvRoUluCg)
+[![Watch the video](https://img.youtube.com/vi/3GtvRoUluCg/0.jpg)](https://youtu.be/3GtvRoUluCg)
 
 ## Getting started
 
