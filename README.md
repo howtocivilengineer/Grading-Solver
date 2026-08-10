@@ -43,6 +43,10 @@ where you need honest cut/fill and a cost in minutes, not a full corridor model.
   imperial (ft, yd³) — it relabels and reports, it never rescales your
   coordinates.
 
+## Video
+
+[▶️ Watch TOPO Solver in action on YouTube](https://youtu.be/3GtvRoUluCg)
+
 ## Getting started
 
 1. Open the [app](https://howtocivilengineer.github.io/Grading-Solver/).
