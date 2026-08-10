@@ -177,8 +177,8 @@ canvas.pan{cursor:grab}
       <div class="body">
         <div class="drop" id="drop"><span id="dropTxt">Drop a LandXML survey, a DXF of outlines, or a saved job here</span></div>
         <input type="file" id="file" accept=".xml,.landxml,.dxf,.json" class="hide">
-        <button class="wide" id="demo">Load the demo site</button>
-        <p class="hint" id="groundHint">A survey sets the ground. A DXF of closed polylines comes in as pads. Without either you get a demo site.</p>
+        <button class="wide" id="demo">Load the sample site</button>
+        <p class="hint" id="groundHint">A survey sets the ground. A DXF of closed polylines comes in as pads. Without either, load the sample site — a real survey with two platforms inside a boundary.</p>
       </div>
     </div>
 
@@ -288,7 +288,7 @@ canvas.pan{cursor:grab}
         <button class="wide" id="exDXF">DXF — outlines, levels and contours</button>
         <button class="wide" id="exProj">💾 Save the job</button>
         <button class="wide" id="exDev">⬇ Dev: export everything as data</button>
-        <p class="hint" id="exHint">Vertex TIN gives an exact finished surface — every stake and pad edge is a real vertex, with a sparse skirt out to daylight — so no stair-stepping on the boxes. The ground and subgrade stay gridded (untick to grid the finished surface too, e.g. to tie exactly back to the volumes here). The DXF carries pad outlines with corner levels, design contours and a legend, each on its own layer.</p>
+        <p class="hint" id="exHint">Vertex TIN gives exact finished and subgrade surfaces — every stake and pad edge is a real vertex, with a sparse skirt out to daylight, so no stair-stepping on the boxes. Subgrade sits a construction depth below the finished pad and matches it where there is no depth. The ground stays gridded (untick to grid the design surfaces too, e.g. to tie exactly back to the volumes here). The DXF carries pad outlines with corner levels, design contours and a legend, each on its own layer.</p>
       </div>
     </div>
 
@@ -296,7 +296,7 @@ canvas.pan{cursor:grab}
       <h2 id="h-help">6 · Help</h2>
       <div class="body">
         <a class="linkbtn" href="https://github.com/howtocivilengineer/Grading-Solver/blob/main/README.md" target="_blank" rel="noopener" id="l-readme">Readme — guide &amp; docs</a>
-        <a class="linkbtn" href="https://www.youtube.com/@howtocivilengineer" target="_blank" rel="noopener" id="l-video">Video walkthrough</a>
+        <a class="linkbtn" href="https://youtu.be/3GtvRoUluCg" target="_blank" rel="noopener" id="l-video">Video walkthrough</a>
         <p class="hint" id="helpHint">Both open in a new tab.</p>
       </div>
     </div>
@@ -1343,7 +1343,7 @@ function rebuild(geom){
   S.volBulk=volumeOf(S.fgBulk,S.egStrip);       // the earthworks that actually get moved
   S.fg=S.fgBulk;
   S.vol=S.volBulk;
-  S.cont=(S.showFgCont&&S.cInt>0)?isolines(S.fgFin,S.cInt):null;   // the design you set out to
+  S.cont=(S.showFgCont&&S.cInt>0)?isolines(S.fgFin,S.cInt,true):null;   // the design you set out to
   S.egCont=(S.showEgCont&&S.cInt>0)?isolines(C.eg,S.cInt):null;
   showVol();showRates();drawPadList();drawEditor();draw();
 }
@@ -1365,7 +1365,7 @@ function balancePad(pi){
 }
 
 /* ─────────────── contours (marching squares) ─────────────── */
-function isolines(grid,iv){
+function isolines(grid,iv,clipBoundary){
   const C=S.cache,nx=C.nx,ny=C.ny,cell=C.cell;
   const map=new Map();
   let total=0;
@@ -1373,6 +1373,8 @@ function isolines(grid,iv){
     const y=C.y0+j*cell, r0=j*nx, r1=(j+1)*nx;
     for(let i=0;i<nx-1;i++){
       if(C.live&&!(C.live[r0+i]&&C.live[r0+i+1]&&C.live[r1+i+1]&&C.live[r1+i]))continue;
+      // design contours belong to the works only — never past the site boundary
+      if(clipBoundary&&C.inb&&!(C.inb[r0+i]&&C.inb[r0+i+1]&&C.inb[r1+i+1]&&C.inb[r1+i]))continue;
       const a=grid[r0+i],b=grid[r0+i+1],c=grid[r1+i+1],d=grid[r1+i];
       let lo=a,hi=a;
       if(b<lo)lo=b;else if(b>hi)hi=b;
@@ -2141,14 +2143,20 @@ function drawPlan(){
     }
   }
   if(S.cLabels){labelContours(S.egCont,'#8fdcff','#0b1a24');labelContours(S.cont,'#ffe6a8','#2a2008');}
-  // pads
-  S.pads.forEach((p,i)=>{
+  // pads — boundary first so its colour wash sits UNDER the pads, never over them
+  const drawOrder=S.pads.map((p,i)=>i).sort((a,b)=>(S.pads[a].isBoundary?0:1)-(S.pads[b].isBoundary?0:1));
+  drawOrder.forEach((i)=>{
+    const p=S.pads[i];
     if(!p.pts.length)return;
     const on=i===S.active;
     cx.beginPath();
     p.pts.forEach((q,k)=>k?cx.lineTo(PX(q.x),PY(q.y)):cx.moveTo(PX(q.x),PY(q.y)));
     if(p.pts.length>2)cx.closePath();
     if(p.isBoundary){
+      // fill with the boundary colour just like a pad, so its colour reads in
+      // plan the same as it does in 3D; keep the distinctive dashed white edge
+      cx.fillStyle=S.padFill?(on?p.col+'d0':p.col+'b0'):(on?p.col+'26':p.col+'14');
+      if(p.pts.length>2)cx.fill();
       cx.strokeStyle=p.col||'#ff5cf0';cx.lineWidth=on?3.4:3;cx.stroke();
       cx.setLineDash([10,7]);cx.lineWidth=1.2;cx.strokeStyle='#ffffffaa';cx.stroke();cx.setLineDash([]);
     }else{
@@ -3106,7 +3114,31 @@ function toeAlong(p,V,dir,spec){
     d=(d+dd)/2;
   }
   const gx=egAt(V.x+dir.x*d, V.y+dir.y*d);
+  // the boundary is hard: a batter stops at the line, leaving a face — the grid
+  // does this too. If the toe would land outside, pull the ray back to the line.
+  if(S.boundary){
+    const cut=rayBoundaryHit(V.x,V.y,dir.x,dir.y,d);
+    if(cut!=null && cut<d){
+      const cx=V.x+dir.x*cut, cy=V.y+dir.y*cut;
+      return {x:cx,y:cy,z:egAt(cx,cy),d:cut,clipped:true};
+    }
+  }
   return {x:V.x+dir.x*d, y:V.y+dir.y*d, z:gx, d};
+}
+/** distance along a ray from (ox,oy) dir (dx,dy) to the first boundary crossing
+ *  within maxD, or null if the ray stays inside out to maxD */
+function rayBoundaryHit(ox,oy,dx,dy,maxD){
+  const B=S.boundary; if(!B)return null;
+  let hit=null;
+  for(let i=0;i<B.length;i++){
+    const A=B[i], C=B[(i+1)%B.length];
+    const ex=C.x-A.x, ey=C.y-A.y;
+    const den=dx*ey-dy*ex; if(Math.abs(den)<1e-12)continue;
+    const t=((A.x-ox)*ey-(A.y-oy)*ex)/den;         // along the ray
+    const u=((A.x-ox)*dy-(A.y-oy)*dx)/den;         // along the edge
+    if(t>1e-6 && t<=maxD+1e-9 && u>=-1e-9 && u<=1+1e-9){ if(hit==null||t<hit)hit=t; }
+  }
+  return hit;
 }
 /** is (x,y) inside some pad other than p? */
 function otherPad(x,y,p){
@@ -3116,7 +3148,7 @@ function otherPad(x,y,p){
   }
   return false;
 }
-function finishedTIN(){
+function finishedTIN(subgrade){
   if(!S.cache)return null;
   const C=S.cache;
   const pts=[], faces=[], bounds=[], key=new Map();
@@ -3148,12 +3180,17 @@ function finishedTIN(){
     if(p.isBoundary||p.pts.length<3)continue;
     const all=padPts(p);                          // pad vertices + this pad's connector nodes
     const n=p.pts.length;
+    // subgrade: the box is dug a construction depth below the finished pad, so
+    // the pad BODY drops by that depth. The batter skirt is natural material and
+    // does not move — it still ties to the ground. Depth-0 pads are unchanged, so
+    // an undisturbed area (no level change) has no subgrade offset either.
+    const dz=(subgrade?(p.depth||0):0);
 
     // Toes belong to an EDGE END, not to a vertex. Each vertex therefore has a
     // toe for the edge arriving and a toe for the edge leaving. Where they
     // differ the surface has to get from one to the other, and that transition
     // is the wall's return — the wedge against the adjoining batter.
-    const P=all.map(q=>({x:q.x,y:q.y,z:q.z}));
+    const P=all.map(q=>({x:q.x,y:q.y,z:q.z-dz}));
     const push=q=>{P.push({x:q.x,y:q.y,z:q.z});return P.length-1;};
     const body=new Set(); for(let i=0;i<all.length;i++)body.add(i);
     const cons=[];
@@ -3193,7 +3230,7 @@ function finishedTIN(){
         const A=p.pts[i], B=p.pts[nx2];
         const ex=B.x-A.x, ey=B.y-A.y, L=Math.hypot(ex,ey)||1;
         const e=Math.min(0.05,L*0.25);
-        const V={x:A.x+ex/L*e, y:A.y+ey/L*e, z:A.z+(B.z-A.z)*(e/L)};
+        const V={x:A.x+ex/L*e, y:A.y+ey/L*e, z:A.z+(B.z-A.z)*(e/L)-dz};
         const vi=push(V); body.add(vi);
         chain.push({v:vi,toe:toeAlong(p,V,dirOut,specOut)});
       }else if(Math.hypot(tOut.x-tIn.x,tOut.y-tIn.y)>SNAP){
@@ -3317,10 +3354,12 @@ function exportXML(){
     +'<Application name="Grading Solver" version="1.0"/>\n<Surfaces>\n';
   let totP=0,totF=0;
   // grid → TIN: every cell becomes two faces (the dense, tie-out-with-volumes surface)
-  const emitGrid=(name,SRC)=>{
+  const emitGrid=(name,SRC,clip)=>{
     const id=new Int32Array(C.nx*C.ny).fill(-1);
+    const inWorks=(i,j)=>!clip || !C.inb || C.inb[j*C.nx+i];   // design surfaces stop at the boundary
     let n=0, pts='', fac='';
     for(let j=0;j<C.ny;j+=st)for(let i=0;i<C.nx;i+=st){
+      if(!inWorks(i,j))continue;
       id[j*C.nx+i]=++n;
       pts+='<P id="'+n+'">'+(C.y0+j*C.cell).toFixed(4)+' '+(C.x0+i*C.cell).toFixed(4)+' '+SRC[j*C.nx+i].toFixed(4)+'</P>\n';
     }
@@ -3352,11 +3391,13 @@ function exportXML(){
     totP+=T.pts.length;totF+=T.faces.length;
     x+='<Surface name="'+name+'"><Definition surfType="TIN">\n<Pnts>\n'+pts+'</Pnts>\n<Faces>\n'+fac+'</Faces>\n</Definition>\n'+bnd+'</Surface>\n';
   };
-  const tin = wantTIN ? finishedTIN() : null;
-  emitGrid(S.egName+' - EG stripped', S.egStrip);   // ground is a field, always the grid
-  emitGrid(S.egName+' - subgrade',    S.fgBulk);
+  const tin = wantTIN ? finishedTIN(false) : null;
+  const sub = wantTIN ? finishedTIN(true)  : null;
+  emitGrid(S.egName+' - EG stripped', S.egStrip);   // ground is a field, always the grid, full survey
+  if(sub){ emitTIN(S.egName+' - subgrade (TIN)', sub); }
+  else   { emitGrid(S.egName+' - subgrade', S.fgBulk, true); }
   if(tin){ emitTIN(S.egName+' - finished (TIN)', tin); }
-  else   { emitGrid(S.egName+' - finished', S.fgFin); }
+  else   { emitGrid(S.egName+' - finished', S.fgFin, true); }
   x+='</Surfaces>\n</LandXML>\n';
   save(safe(S.egName)+'-surfaces.xml',x,'application/xml');
   const how = tin
@@ -3551,20 +3592,130 @@ function exportDXF(){
 }
 
 /* ─────────────── set up ─────────────── */
+const SAMPLE_EG=`<?xml version="1.0"?><LandXML xmlns="http://www.landxml.org/schema/LandXML-1.2" version="1.2"><Units><Metric linearUnit="meter" areaUnit="squareMeter" volumeUnit="cubicMeter"/></Units><Surface name="Site EG"><Definition surfType="TIN"><Pnts><P id="5">20405.891665239818 -24321.72198399622 13.545990583853</P><P id="6">20356.132995804772 -24321.72198399622 9.565297029049</P><P id="7">20356.132995804772 -24249.024492771365 9.958313209563</P><P id="8">20406.549863709137 -24249.024492771365 15.</P></Pnts><Faces><F>8 5 7</F><F>7 5 6</F></Faces></Definition></Surface></LandXML>`;
+const SAMPLE_DXF=`0
+SECTION
+2
+ENTITIES
+0
+LWPOLYLINE
+8
+0
+90
+4
+70
+1
+10
+-24316.684
+20
+20360.629
+10
+-24256.684
+20
+20360.629
+10
+-24256.684
+20
+20400.629
+10
+-24316.684
+20
+20400.629
+0
+LWPOLYLINE
+8
+0
+90
+4
+70
+1
+10
+-24291.684
+20
+20380.629
+10
+-24261.684
+20
+20380.629
+10
+-24261.684
+20
+20395.629
+10
+-24291.684
+20
+20395.629
+0
+LWPOLYLINE
+8
+0
+90
+10
+70
+1
+10
+-24266.694
+20
+20360.739
+10
+-24266.694
+20
+20362.639
+10
+-24261.694
+20
+20362.639
+10
+-24261.684
+20
+20380.619
+10
+-24291.694
+20
+20380.619
+10
+-24291.694
+20
+20395.629
+10
+-24315.674
+20
+20395.619
+10
+-24315.674
+20
+20362.639
+10
+-24272.674
+20
+20362.639
+10
+-24272.674
+20
+20360.739
+0
+ENDSEC
+0
+EOF
+`;
 function startDemo(){
-  S.eg=demoGround();S.egName='demo site';S.maskDirty=true;S.maskImg=null;
-  {const e=$('site');if(e)e.textContent=T('demo site');}
+  // The sample site: a real Civil 3D survey (Site EG) and its DXF linework — a
+  // 60x40 boundary with two building platforms — brought in through the very
+  // same import paths a dropped file uses, so the sample is nothing special.
+  let got=null;
+  try{ got=loadLandXML(SAMPLE_EG,'Site EG'); }catch(e){ got=null; }
+  if(got){ S.eg=got.g; S.egName=got.name||'Sample site'; }
+  else   { S.eg=demoGround(); S.egName='Sample site'; }
+  S.egName='Sample site';
+  {const e=$('site');if(e)e.textContent=S.egName;}
+  S.maskDirty=true;S.maskImg=null;
   S.pads=[];S.nPad=0;
-  S.pads.push(newPad(24,58,58,36,1.0,135));    // sports hall pad
-  S.pads[0].name='Sports hall';
-  S.pads.push(newPad(96,26,62,44,1.8,135));     // carpark
-  S.pads[1].name='Carpark';
-  S.active=0;
+  padsFromDXF(SAMPLE_DXF);          // boundary + two platforms, draped on the ground
+  S.active=S.pads.findIndex(p=>!p.isBoundary); if(S.active<0)S.active=0;
   UND.length=0;RED.length=0;
   S.cfDirty=true;rebuild(true);
-  balancePad(0);balancePad(1);
   syncPadInputs();fitView();
-  note('Demo site loaded');
+  note('Sample site loaded');
 }
 function markDirty(){S.cfDirty=true;}
 const wrapRebuild=rebuild;
