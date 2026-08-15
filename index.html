@@ -1464,20 +1464,29 @@ function finishIso(map,iv){
    rescaled — coordinates and levels stay exactly as the file holds them.
    All that changes is the labels, and volumes: cubic feet are reported as
    cubic yards, the way earthworks are actually measured and paid.        */
+/** Data is held in the survey's own units (metres). The toggle CONVERTS for
+ *  display and for anything you type — it does not touch the stored survey, so
+ *  exports still carry the original coordinates. f: metres → display length.
+ *  vf: m³ → display volume. brk: the wall pricing step, in display units.    */
 const UNITS={
-  m :{lab:'m', vdiv:1,  vlab:'m³',  aper:10000, alab:'ha', alab2:'m²', per:'/m³', perL:'/m'},
-  ft:{lab:'ft',vdiv:27, vlab:'yd³', aper:43560, alab:'ac', alab2:'ft²',per:'/yd³',perL:'/ft'}
+  m :{lab:'m', f:1,           vf:1,           vlab:'m³',  aper:10000, alab:'ha', alab2:'m²', per:'/m³', perL:'/m', brk:1},
+  ft:{lab:'ft',f:3.280839895, vf:1.307950619, vlab:'yd³', aper:43560, alab:'ac', alab2:'ft²',per:'/yd³',perL:'/ft',brk:3}
 };
 const U=()=>UNITS[S.units];
+/** a stored length (metres) as the user sees it, and back again */
+const toDisp=v=>v*U().f;
+const fromDisp=v=>v/U().f;
 /** the height where wall pricing steps up — 1 m, or 3 ft in imperial */
-const WALL_BRK=()=>S.units==='ft'?3:1;
+const WALL_BRK=()=>U().brk;              // the number shown on the label
+const WALL_BRK_M=()=>U().brk/U().f;      // the same height, stored (metres)
 const nf=v=>Math.round(v).toLocaleString();
-/** a volume, reported in yd³ once imperial */
-const m3=v=>nf(v/U().vdiv)+' '+U().vlab;
-/** a length or a level, in whatever the file is measured in */
-const uL=(v,dp)=>v.toFixed(dp===undefined?2:dp)+' '+U().lab;
+/** a volume, converted and reported in m³ or yd³ */
+const m3=v=>nf(v*U().vf)+' '+U().vlab;
+/** a length or a level, converted into the chosen system */
+const uL=(v,dp)=>toDisp(v).toFixed(dp===undefined?2:dp)+' '+U().lab;
 /** an area, stepping up to hectares or acres once it gets long */
-const uA=v=>{const u=U();return v>u.aper?(v/u.aper).toFixed(2)+' '+u.alab:nf(v)+' '+u.alab2;};
+const uA=v=>{const u=U(), a=v*u.f*u.f;
+  return a>u.aper?(a/u.aper).toFixed(2)+' '+u.alab:nf(a)+' '+u.alab2;};
 /** flip every readout and rate label to the chosen system; never rescales data */
 function relabelUnits(){
   const u=U(), P=u.per, L=u.perL, ux=u.lab;
@@ -1494,13 +1503,63 @@ function relabelUnits(){
   set('l-qwo',   T('Wall')+' > '+wb);
   set('l-cqty',  T('Quantity'));
   set('l-ccost', T('Cost'));
+  relabelSelects();
+}
+/** the settings/export dropdowns carry hardcoded metric labels in their option
+ *  text; rewrite the unit suffix so they track the metric/imperial toggle. The
+ *  values are never converted — the toggle just says how the numbers are read —
+ *  so only the "m" label after each number changes. */
+/** The settings/export dropdowns hold their values in stored units (metres) but
+ *  are offered as round numbers in whichever system is on — 0.15 m of topsoil,
+ *  or 6 in, rather than an ugly converted 0.49 ft. Rebuild the lists on a
+ *  switch and keep the nearest equivalent selected. */
+const SELOPTS={
+  tStrip:{m :[['0','none'],['0.1','0.10 m'],['0.15','0.15 m'],['0.2','0.20 m'],['0.25','0.25 m'],['0.3','0.30 m']],
+          ft:[['0','none'],['0.1524','0.5 ft'],['0.2286','0.75 ft'],['0.3048','1 ft'],['0.4572','1.5 ft']]},
+  cInt  :{m :[['0.1','0.10 m'],['0.25','0.25 m'],['0.5','0.50 m'],['1','1.00 m']],
+          ft:[['0.1524','0.5 ft'],['0.3048','1 ft'],['0.6096','2 ft'],['1.524','5 ft']]},
+  gridSp:{m :[['5','5 m'],['10','10 m'],['20','20 m'],['25','25 m']],
+          ft:[['6.096','20 ft'],['7.62','25 ft'],['15.24','50 ft'],['30.48','100 ft']]},
+  snap  :{m :[['0','no snap'],['0.5','0.50 m'],['1','1 m'],['5','5 m']],
+          ft:[['0','no snap'],['0.3048','1 ft'],['1.524','5 ft'],['3.048','10 ft']]},
+  gCell :{m :[['0.2','0.20 m'],['0.25','0.25 m'],['0.4','0.40 m'],['0.5','0.50 m'],['1','1.00 m']],
+          ft:[['0.1524','0.5 ft'],['0.3048','1 ft'],['0.6096','2 ft'],['0.9144','3 ft']]},
+  exRes :{m :[['0.5','0.5 m — heavy'],['1','1 m — matches the volumes here'],['2','2 m'],['5','5 m — light']],
+          ft:[['0.3048','1 ft — heavy'],['0.9144','3 ft — matches the volumes here'],['1.524','5 ft'],['3.048','10 ft — light']]}
+};
+function relabelSelects(){
+  const sys=S.units==='ft'?'ft':'m';
+  for(const id in SELOPTS){
+    const sel=$(id); if(!sel)continue;
+    const want=parseFloat(sel.value);
+    const list=SELOPTS[id][sys];
+    sel.innerHTML=list.map(([v,t])=>'<option value="'+v+'">'+t+'</option>').join('');
+    // keep whatever was set, landing on the nearest offer in the new system
+    if(isFinite(want)){
+      let best=list[0][0], bd=Infinity;
+      for(const [v] of list){const d=Math.abs(parseFloat(v)-want); if(d<bd){bd=d;best=v;}}
+      sel.value=best;
+    }
+  }
 }
 function setUnits(next){
   S.units = next==='ft'?'ft':'m';
   relabelUnits();
+  // the dropdowns were rebuilt into the new system and may have landed on the
+  // nearest equivalent, so take those values back into the model before drawing
+  const num=(id,fb)=>{const e=$(id);const v=e?parseFloat(e.value):NaN;return isFinite(v)?v:fb;};
+  S.strip =num('tStrip',S.strip);
+  S.cInt  =num('cInt',  S.cInt);
+  S.gridSp=num('gridSp',S.gridSp);
+  S.snap  =num('snap',  S.snap);
+  S.cell  =num('gCell', S.cell);
+  const lw=$('lW'); if(lw)lw.value=toDisp(S.linkW).toFixed(2);
+  const nw=$('nW'); if(nw)nw.value=toDisp(S.newW||40).toFixed(0);
+  const nl=$('nL'); if(nl)nl.value=toDisp(S.newL||28).toFixed(0);
+  rebuild(true);
   showVol(); showRates(); drawPadList(); drawEditor(); layoutOverlays(); draw();
-  note(S.units==='ft'?'Reading the survey as imperial — ft and yd³'
-                     :'Reading the survey as metric — m and m³');
+  note(S.units==='ft'?'Reading the survey in imperial — ft and yd³'
+                     :'Reading the survey in metric — m and m³');
 }
 /** lineal metres of retained face, and how much of it is over a metre high */
 function wallQuantities(){
@@ -1523,7 +1582,7 @@ function wallQuantities(){
         const h=Math.abs((A.z+(B.z-A.z)*t)-egAt(x,y));
         if(h>maxH)maxH=h;
         if(h<=DEAD)continue;
-        (h<=WALL_BRK()? (under+=L/steps) : (over+=L/steps));
+        (h<=WALL_BRK_M()? (under+=L/steps) : (over+=L/steps));
       }
     }
   }
@@ -1536,23 +1595,24 @@ function rates(){
   const waste=Math.max(0,cut-fill);               // surplus off site
   const imp=Math.max(0,fill-cut);                 // shortfall brought in
   const w=wallQuantities();
-  const r=S.rates, vd=U().vdiv;
-  // volumes are billed per reporting unit (per yd³ in imperial); wall rates are per uL
+  const r=S.rates, vf=U().vf, lf=U().f;
+  // rates are entered per displayed unit — per yd³ and per ft in imperial — so
+  // bill the quantity in that same unit
   return {reuse,waste,imp,wallU:w.under,wallO:w.over,maxH:w.maxH,
-    cost:reuse/vd*(r.fill||0)+waste/vd*(r.waste||0)+imp/vd*(r.import||0)+
-         w.under*(r.wallU||0)+w.over*(r.wallO||0)};
+    cost:reuse*vf*(r.fill||0)+waste*vf*(r.waste||0)+imp*vf*(r.import||0)+
+         w.under*lf*(r.wallU||0)+w.over*lf*(r.wallO||0)};
 }
 function showRates(){
   const r=rates(); if(!r)return;
   const money=v=>(S.rates.cur||'')+nf(v);
   // rates are entered per reporting unit — per yd³ in imperial — so bill the
   // volume in the same unit it is shown in, and the wall lengths likewise
-  const vd=U().vdiv, cur=S.rates.cur||'';
-  $('qReuse').textContent=m3(r.reuse); $('mReuse').textContent=money(r.reuse/vd*(S.rates.fill||0));
-  $('qWaste').textContent=m3(r.waste); $('mWaste').textContent=money(r.waste/vd*(S.rates.waste||0));
-  $('qImport').textContent=m3(r.imp);  $('mImport').textContent=money(r.imp/vd*(S.rates.import||0));
-  $('qWallU').textContent=uL(r.wallU,1); $('mWallU').textContent=money(r.wallU*(S.rates.wallU||0));
-  $('qWallO').textContent=uL(r.wallO,1); $('mWallO').textContent=money(r.wallO*(S.rates.wallO||0));
+  const vf=U().vf, lf=U().f, cur=S.rates.cur||'';
+  $('qReuse').textContent=m3(r.reuse); $('mReuse').textContent=money(r.reuse*vf*(S.rates.fill||0));
+  $('qWaste').textContent=m3(r.waste); $('mWaste').textContent=money(r.waste*vf*(S.rates.waste||0));
+  $('qImport').textContent=m3(r.imp);  $('mImport').textContent=money(r.imp*vf*(S.rates.import||0));
+  $('qWallU').textContent=uL(r.wallU,1); $('mWallU').textContent=money(r.wallU*lf*(S.rates.wallU||0));
+  $('qWallO').textContent=uL(r.wallO,1); $('mWallO').textContent=money(r.wallO*lf*(S.rates.wallO||0));
   $('qTotal').textContent=money(r.cost);
 }
 function showVol(){
@@ -1671,7 +1731,7 @@ function drawEditor(){
          <button data-cz="-0.25">−0.25</button><button data-cz="-0.05">−0.05</button>
          <button data-cz="0.05">+0.05</button><button data-cz="0.25">+0.25</button></div>`+
       `<div class="row" style="margin-top:5px">
-         <input type="number" id="cZ" step="0.01" value="${q.z.toFixed(3)}"></div>`+
+         <input type="number" id="cZ" step="0.01" value="${toDisp(q.z).toFixed(3)}"></div>`+
       `<div class="g2">
          <button id="cToGround">${T('Drape to EG')}</button>
          <button id="cToFG">${T('Drape to FG')}</button></div>`+
@@ -1689,7 +1749,7 @@ function drawEditor(){
          <button data-bz="-0.25">−0.25</button><button data-bz="-0.05">−0.05</button>
          <button data-bz="0.05">+0.05</button><button data-bz="0.25">+0.25</button></div>`+
       `<div class="row" style="margin-top:5px">
-         <input type="number" id="bZ" step="0.01" value="${q.z.toFixed(3)}">
+         <input type="number" id="bZ" step="0.01" value="${toDisp(q.z).toFixed(3)}">
          <button id="bToGround" style="flex:.9">${T('To ground')}</button></div>`+
       `<div class="kv" style="margin-top:6px"><span>${T('Ground here')}</span><span>${uL(g,3)}</span></div>`+
       `<div class="kv"><span>${Math.abs(d)<=DEAD?'—':(d>0?T('fill'):T('cut'))}</span>`+
@@ -1731,7 +1791,7 @@ function drawEditor(){
          <button id="eDrapeG">${T('Drape to ground')}</button></div>`+
       `<button class="wide" id="eSplit">${T('Add a stake at mid-string')}</button>`+
       `<div class="row" style="margin-top:5px">
-         <input type="number" id="eAtD" step="0.5" min="0" placeholder="${T('m from green')}">
+         <input type="number" id="eAtD" step="0.5" min="0" placeholder="${U().lab} ${T('from green')}">
          <button id="eAtGo" style="flex:.6">${T('Add')}</button></div>`+
       `<label class="f">${T('Batter on this edge only')}</label>`+
       `<div class="g2">
@@ -1759,11 +1819,11 @@ function drawEditor(){
       `<div class="kv"><span>${T('Corners')}</span><span>${p.pts.length}</span></div>`+
       `<label class="f">${T('Construction depth')} — ${T('everywhere but the pads')}</label>`+
       `<div class="row">
-         <input type="number" id="pDepth" step="0.05" min="0" value="${(p.depth||0).toFixed(3)}">
+         <input type="number" id="pDepth" step="0.05" min="0" value="${toDisp(p.depth||0).toFixed(3)}">
          <select id="pDepthPre" style="flex:1.3">
            <option value="">…</option><option value="0">none</option>
-           <option value="0.1">0.10 m</option><option value="0.15">0.15 m — topsoil respread</option>
-           <option value="0.2">0.20 m</option><option value="0.3">0.30 m</option>
+           <option value="0.1">0.10 ${U().lab}</option><option value="0.15">0.15 ${U().lab} — ${T('topsoil respread')}</option>
+           <option value="0.2">0.20 ${U().lab}</option><option value="0.3">0.30 ${U().lab}</option>
          </select></div>`+
       `<p class="hint">${T('Click a corner or a string on it to set levels, just like a pad.')}</p>`;
   }else{
@@ -1780,12 +1840,12 @@ function drawEditor(){
          <button data-dz="-0.25">−0.25</button><button data-dz="-0.05">−0.05</button>
          <button data-dz="0.05">+0.05</button><button data-dz="0.25">+0.25</button></div>`+
       `<div class="row" style="margin-top:5px">
-         <input type="number" id="allZ" step="0.01" value="${meanZ(p).toFixed(3)}">
+         <input type="number" id="allZ" step="0.01" value="${toDisp(meanZ(p)).toFixed(3)}">
          <button id="allSet" style="flex:.9">${T('All corners')}</button></div>`+
       `<p class="hint">${T('Sets every corner of this pad to one level — a flat pad.')}</p>`+
 
       `<div class="kv"><span>${T('Overall fall')}</span><span>${f.grade.toFixed(2)}% → ${bearing(f.dir)}</span></div>`+
-      `<div class="kv"><span>${T('area')}</span><span>${Math.round(padArea(p)).toLocaleString()} m²</span></div>`+
+      `<div class="kv"><span>${T('area')}</span><span>${uA(padArea(p))}</span></div>`+
       `<div class="g2">
          <div><label class="f">${T('Cut batter 1V :')}</label>
            <input type="number" id="pbCut" step="0.5" min="0.5" value="${(p.bCut??S.bCut)}"></div>
@@ -1820,9 +1880,9 @@ const bearing=d=>T(DIRN[Math.round(((d%360)+360)%360/45)%8]);
 function wireEditor(){
   const p=selPad(); if(!p)return;
   document.querySelectorAll('[data-cz]').forEach(b=>b.onclick=()=>{
-    push();p.pts[S.sel.i].z=+(p.pts[S.sel.i].z+ +b.dataset.cz).toFixed(3);rebuild();});
+    push();p.pts[S.sel.i].z=+(p.pts[S.sel.i].z+fromDisp(+b.dataset.cz)).toFixed(3);rebuild();});
   const cz=$('cZ');
-  if(cz)cz.onchange=e=>{push();p.pts[S.sel.i].z=+e.target.value||0;rebuild();};
+  if(cz)cz.onchange=e=>{push();p.pts[S.sel.i].z=fromDisp(+e.target.value||0);rebuild();};
   const cg=$('cToGround');
   if(cg)cg.onclick=()=>{const q=p.pts[S.sel.i];push();q.z=+egAt(q.x,q.y).toFixed(3);rebuild();};
   const cf=$('cToFG');
@@ -1833,9 +1893,9 @@ function wireEditor(){
   };
   const bz=$('bZ');
   const brk=()=>(p.breaks||[])[S.sel.b];
-  if(bz)bz.onchange=e=>{push();bNode(brk(),S.sel.i).z=+e.target.value||0;rebuild();};
+  if(bz)bz.onchange=e=>{push();bNode(brk(),S.sel.i).z=fromDisp(+e.target.value||0);rebuild();};
   document.querySelectorAll('[data-bz]').forEach(bt=>bt.onclick=()=>{
-    push();const q=bNode(brk(),S.sel.i);q.z=+(q.z+ +bt.dataset.bz).toFixed(3);rebuild();});
+    push();const q=bNode(brk(),S.sel.i);q.z=+(q.z+fromDisp(+bt.dataset.bz)).toFixed(3);rebuild();});
   const btg=$('bToGround');
   if(btg)btg.onclick=()=>{push();const q=bNode(brk(),S.sel.i);q.z=+egAt(q.x,q.y).toFixed(3);rebuild();};
   const lbc=$('lbCut');
@@ -1895,7 +1955,7 @@ function wireEditor(){
     const i=S.sel.i,rv=!!S.sel.rev,n=p.pts.length;
     const ia=rv?(i+1)%n:i, ib=rv?i:(i+1)%n;
     const A=p.pts[ia],B=p.pts[ib],L=edgeLen(p,i);
-    const d=parseFloat($('eAtD').value);
+    const d=fromDisp(parseFloat($('eAtD').value));
     if(!isFinite(d)||d<=0||d>=L){note('Give a distance between 0 and '+uL(L)+'',true);return;}
     const t=d/L;
     const q={x:+(A.x+(B.x-A.x)*t).toFixed(3),y:+(A.y+(B.y-A.y)*t).toFixed(3),
@@ -1903,12 +1963,12 @@ function wireEditor(){
     push();
     insertStake(p,i+1,q);                       // always lands between the two ends
     refreshCentre(p);S.sel={kind:'corner',i:i+1};rebuild(true);
-    note('Stake set '+d.toFixed(2)+' m from the green end');
+    note('Stake set '+d.toFixed(2)+' '+U().lab+' from the green end');
   };
   const esw=$('eSwap');
   if(esw)esw.onclick=()=>{S.sel.rev=!S.sel.rev;drawEditor();draw();};
   document.querySelectorAll('[data-dz]').forEach(b=>b.onclick=()=>{
-    push();p.pts.forEach(q=>q.z=+(q.z+ +b.dataset.dz).toFixed(3));rebuild();});
+    push();p.pts.forEach(q=>q.z=+(q.z+fromDisp(+b.dataset.dz)).toFixed(3));rebuild();});
   const bdr=$('bDrape');
   if(bdr)bdr.onclick=()=>{push();drapePad(p);rebuild(true);note('Boundary draped on the ground');};
   const nm=$('pName');
@@ -1929,13 +1989,13 @@ function wireEditor(){
     note(n+' added stake(s) removed, the imported ones kept');
   };
   const az=$('allSet');
-  if(az)az.onclick=()=>{const v=+$('allZ').value||0;push();p.pts.forEach(q=>q.z=+v.toFixed(3));rebuild();};
+  if(az)az.onclick=()=>{const v=fromDisp(+$('allZ').value||0);push();p.pts.forEach(q=>q.z=+v.toFixed(3));rebuild();};
   const pbc=$('pbCut');
   if(pbc)pbc.onchange=e=>{push();p.bCut=Math.max(0.5,+e.target.value||S.bCut);rebuild(true);};
   const pbf=$('pbFill');
   if(pbf)pbf.onchange=e=>{push();p.bFill=Math.max(0.5,+e.target.value||S.bFill);rebuild(true);};
   const dp=$('pDepth');
-  if(dp)dp.onchange=e=>{push();p.depth=Math.max(0,+e.target.value||0);rebuild();};
+  if(dp)dp.onchange=e=>{push();p.depth=Math.max(0,fromDisp(+e.target.value||0));rebuild();};
   const dpre=$('pDepthPre');
   if(dpre)dpre.onchange=e=>{if(e.target.value==='')return;push();p.depth=+e.target.value;rebuild();};
   const pg=$('plGo');
@@ -1953,7 +2013,7 @@ function drawPadList(){
     d.className='pad'+(i===S.active?' on':'');
     const mean=meanZ(p), f=padFall(p);
     d.innerHTML=`<div class="nm"><span class="sw" style="background:${p.col}"></span>${p.name}</div>`+
-      (p.isBoundary?`<div class="meta" style="color:${p.col}">${T('site boundary')} · ${Math.round(padArea(p)).toLocaleString()} m²</div>`
+      (p.isBoundary?`<div class="meta" style="color:${p.col}">${T('site boundary')} · ${uA(padArea(p))}</div>`
        :`<div class="meta">${uL(mean)} · ${f.grade.toFixed(1)}% · `+
       `${uA(padArea(p))}${p.depth?' · −'+uL(p.depth):''}</div>`);
     d.onclick=()=>{S.active=i;S.sel={kind:'pad',i:0};drawPadList();drawEditor();draw();};
@@ -2116,8 +2176,8 @@ function drawPlan(){
     cx.stroke();
     if(S.view.s>2.2){
       cx.fillStyle='rgba(200,215,230,.5)';cx.font='9px ui-monospace,monospace';
-      for(let x=Math.ceil(bb.x0/sp)*sp;x<=bb.x1;x+=sp)cx.fillText(x.toFixed(0),PX(x)+2,PY(bb.y1)+11);
-      for(let y=Math.ceil(bb.y0/sp)*sp;y<=bb.y1;y+=sp)cx.fillText(y.toFixed(0),PX(bb.x0)+2,PY(y)-3);
+      for(let x=Math.ceil(bb.x0/sp)*sp;x<=bb.x1;x+=sp)cx.fillText(toDisp(x).toFixed(0),PX(x)+2,PY(bb.y1)+11);
+      for(let y=Math.ceil(bb.y0/sp)*sp;y<=bb.y1;y+=sp)cx.fillText(toDisp(y).toFixed(0),PX(bb.x0)+2,PY(y)-3);
     }
   }
   // existing ground contours
@@ -2193,7 +2253,7 @@ function drawPlan(){
           cx.strokeStyle='#ffffff';cx.lineWidth=3.5;
           cx.beginPath();cx.moveTo(PX(A.x),PY(A.y));cx.lineTo(PX(B.x),PY(B.y));cx.stroke();
         }
-        const txt=edgeLen(p,e).toFixed(1)+' m   '+(g>=0?'+':'−')+Math.abs(g).toFixed(2)+'%';
+        const txt=toDisp(edgeLen(p,e)).toFixed(1)+' '+U().lab+'   '+(g>=0?'+':'−')+Math.abs(g).toFixed(2)+'%';
         cx.fillStyle='#0d1218cc';
         const w=cx.measureText(txt).width+6;
         cx.fillRect(mx-w/2,my-7,w,13);
@@ -2235,7 +2295,7 @@ function drawPlan(){
           cx.closePath();cx.fill();
           cx.strokeStyle=pin?'#ffe08a':'#06323d';cx.lineWidth=pin?1.8:1.2;cx.stroke();
           cx.fillStyle=lit?'#ffffff':'#cdf3fb';cx.font=(lit?'bold ':'')+'10px ui-monospace,monospace';
-          cx.fillText(q.z.toFixed(3),X+r+3,Y-r-1);
+          cx.fillText(toDisp(q.z).toFixed(3),X+r+3,Y-r-1);
         });
       }
     });
@@ -2259,7 +2319,7 @@ function drawPlan(){
       }
       cx.fillStyle=start?'#bdf2c9':end?'#ffc4b4':lit?'#ffffff':'#fff6df';
       cx.font=((lit||start||end)?'bold ':'')+'10px ui-monospace,monospace';
-      cx.fillText(q.z.toFixed(3),X+r+3,Y-r-1);
+      cx.fillText(toDisp(q.z).toFixed(3),X+r+3,Y-r-1);
     });
   });
   // the section, marked up the way a cut line is drawn: green at the start,
@@ -2515,7 +2575,7 @@ function drawSection(){
     const y=Y(z);
     sx2.strokeStyle='#1e2731';sx2.lineWidth=1;
     sx2.beginPath();sx2.moveTo(ml,y);sx2.lineTo(w-mr,y);sx2.stroke();
-    sx2.fillStyle='#6d7885';sx2.textAlign='right';sx2.fillText(z.toFixed(2),ml-6,y+3);
+    sx2.fillStyle='#6d7885';sx2.textAlign='right';sx2.fillText(toDisp(z).toFixed(2),ml-6,y+3);
   }
   // chainage marks
   const cst=d.L>200?50:d.L>80?20:d.L>30?10:5;
@@ -2523,7 +2583,7 @@ function drawSection(){
   for(let c=0;c<=d.L;c+=cst){
     const x=X(c);
     sx2.strokeStyle='#1a222c';sx2.beginPath();sx2.moveTo(x,mt);sx2.lineTo(x,h-mb);sx2.stroke();
-    sx2.fillStyle='#6d7885';sx2.fillText(c.toFixed(0),x,h-6);
+    sx2.fillStyle='#6d7885';sx2.fillText(toDisp(c).toFixed(0),x,h-6);
   }
   sx2.textAlign='left';
   const line=(arr,col,wid,dash)=>{
@@ -2679,7 +2739,7 @@ function makeLink(a,bpt){
   S.active=S.pads.length-1;S.sel={kind:'pad',i:0};
   rebuild(true);
   const g=Math.abs((zb-za)/L*100);
-  note('Link made — '+L.toFixed(1)+' m at '+g.toFixed(2)+'%');
+  note('Link made — '+L.toFixed(1)+' '+U().lab+' at '+g.toFixed(2)+'%');
 }
 function padClick(sx,sy){
   const w={x:snapv(WX(sx)),y:snapv(WY(sy))};
@@ -3475,7 +3535,7 @@ function loadProject(d){
     if(se[k]!==undefined)S[k]=se[k];
   $('tStrip').value=S.strip;$('bCut').value=S.bCut;$('bFill').value=S.bFill;
   $('gCell').value=S.cell;$('cInt').value=S.cInt;$('gridSp').value=S.gridSp;
-  $('snap').value=S.snap;$('lW').value=S.linkW;$('vex').value=S.vex;
+  $('snap').value=S.snap;$('lW').value=toDisp(S.linkW).toFixed(2);$('vex').value=S.vex;
   $('cLab').checked=!!S.cLabels;
   if(d.rates){S.rates=Object.assign(S.rates,d.rates);
     $('rCur').value=S.rates.cur;$('rFill').value=S.rates.fill;$('rWaste').value=S.rates.waste;
@@ -3579,12 +3639,11 @@ function exportDXF(){
   const txt=(t,h)=>{G(0,'TEXT');G(8,'LEGEND');G(10,lx.toFixed(3));G(20,ly.toFixed(3));G(30,'0');
     G(40,(h||th).toFixed(3));G(1,t);ly-=th*2;};
   txt('GRADING — '+S.egName,th*1.6);
-  txt('Bulk cut '+Math.round(S.vol.cut)+' m3   fill '+Math.round(S.vol.fill)+' m3');
-  txt('Topsoil '+Math.round(S.volStrip)+' m3 over the works, strip '+S.strip.toFixed(2)+' m');
+  txt('Bulk cut '+m3(S.vol.cut)+'   fill '+m3(S.vol.fill));
+  txt('Topsoil '+m3(S.volStrip)+' over the works, strip '+uL(S.strip));
 
   for(const p of S.pads)if(p.pts.length>2)
-    txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+Math.round(padArea(p))+' m2'+
-      '  batter 1V:'+(p.bCut??S.bCut)+'/'+(p.bFill??S.bFill)+(p.depth?'  box '+p.depth.toFixed(2)+'m':''));
+    txt(p.name+'  '+padFall(p).grade.toFixed(2)+'%  '+uA(padArea(p))+'  batter 1V:'+(p.bCut??S.bCut)+'/'+(p.bFill??S.bFill)+(p.depth?'  box '+uL(p.depth):''));
   G(0,'ENDSEC');G(0,'EOF');
   let out='';for(let i=0;i<o.length;i+=2)out+=String(o[i]).padStart(3,' ')+'\n'+o[i+1]+'\n';
   save(safe(S.egName)+'-grading.dxf',out,'application/dxf');
@@ -3723,7 +3782,7 @@ rebuild=function(g){markDirty();wrapRebuild(g);};
 
 $('pAdd').onclick=()=>{
   push();
-  const bb=egBB(), w=Math.max(1,+$('nW').value||40), l=Math.max(1,+$('nL').value||28);
+  const bb=egBB(), w=Math.max(1,fromDisp(+$('nW').value)||S.newW||40), l=Math.max(1,fromDisp(+$('nL').value)||S.newL||28);
   const p=newPad(bb.x0+(bb.x1-bb.x0)*0.5-w/2,bb.y0+(bb.y1-bb.y0)*0.5-l/2,w,l,1.5,135);
   S.pads.push(p);S.active=S.pads.length-1;S.sel={kind:'pad',i:0};rebuild(true);
 };
@@ -3762,9 +3821,9 @@ $('vPlan').onclick=()=>{S.mode='plan';$('vPlan').classList.add('on');$('v3d').cl
 $('v3d').onclick=()=>{S.mode='3d';$('v3d').classList.add('on');$('vPlan').classList.remove('on');draw();};
 $('vCF').onclick=()=>{S.showCF=!S.showCF;$('vCF').classList.toggle('on',S.showCF);draw();};
 $('pLink').onclick=()=>{setTool('link');if(S.mode!=='plan')$('vPlan').click();note('Click one pad, then the other');};
-$('nW').onchange=e=>{S.newW=+e.target.value||40;};
-$('nL').onchange=e=>{S.newL=+e.target.value||28;};
-$('lW').onchange=e=>{S.linkW=Math.max(0.5,+e.target.value||1.8);};
+$('nW').onchange=e=>{S.newW=fromDisp(+e.target.value||toDisp(40));};
+$('nL').onchange=e=>{S.newL=fromDisp(+e.target.value||toDisp(28));};
+$('lW').onchange=e=>{S.linkW=Math.max(0.05,fromDisp(+e.target.value||toDisp(1.8)));};
 [['sFin','fin'],['sSub','sub'],['sEg','eg'],['sStrip','strip']].forEach(([id,k])=>
   $(id).onchange=e=>{S.sShow[k]=e.target.checked?1:0;drawSection();});
 $('sectClose').onclick=()=>{S.sect=null;$('sect').classList.add('hide');draw();};
