@@ -1,16 +1,6 @@
 <!doctype html>
 <html lang="en">
 <head>
-  
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-QEVJSJFP5R"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-QEVJSJFP5R');
-</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Grading Solver — pads, falls and batters</title>
@@ -189,6 +179,10 @@ canvas.pan{cursor:grab}
         <input type="file" id="file" accept=".xml,.landxml,.dxf,.json" class="hide">
         <button class="wide" id="demo">Load the sample site</button>
         <p class="hint" id="groundHint">A survey sets the ground. A DXF of closed polylines comes in as pads. Without either, load the sample site — a real survey with two platforms inside a boundary.</p>
+      </div></div>
+      <div class="card fold"><h2>Parts</h2><div class="bd">
+        <div id="partList"></div>
+        <p class="hint">Drop a part exported from Parts Solver to add it here, then attach it to a string from the string panel.</p>
       </div>
     </div>
 
@@ -228,9 +222,10 @@ canvas.pan{cursor:grab}
         </div>
         <label class="f" id="l-grid">Design grid</label>
         <select id="gCell">
-          <option value="0.2">0.20 m</option><option value="0.25">0.25 m</option>
-          <option value="0.4" selected>0.40 m</option><option value="0.5">0.50 m</option>
-          <option value="1">1.00 m</option>
+          <option value="1">1.00 m</option><option value="0.5" selected>0.50 m</option>
+          <option value="0.2">0.20 m</option><option value="0.1">0.10 m</option>
+          <option value="0.05">0.05 m — heavy</option>
+          <option value="0.025">0.025 m — very heavy</option>
         </select>
         <p class="hint" id="gridHint">Pad edges land on the nearest half cell, so the box volume runs a little high on a coarse grid — about 4% at 1 m, 1% at 0.25 m.</p>
         <label class="chk"><input type="checkbox" id="cLab">Contour labels</label>
@@ -709,14 +704,14 @@ const S={
   pads:[], active:0, nPad:0, nStk:0, stkIx:null, feats:null,
   tool:'select', pick:-1, snap:1,
   sel:{kind:'pad',i:0},
-  bCut:2, bFill:3, cell:0.4, cInt:0.25,
+  bCut:2, bFill:3, cell:0.5, cInt:0.25,
   showCF:true, mode:'plan',
   fg:null, fgFin:null, fgBulk:null, cache:null, vol:null, volFin:null, volBulk:null,
   cont:null, egCont:null, showEgCont:false, showGrid:false, gridSp:10, padFill:false, showFgCont:true, cLabels:false, linkW:1.8, newW:40, newL:28,
   strip:0.15, egStrip:null, volStrip:0, sect:null,
   boundary:null, bArea:0, bOutside:0,
   rates:{cur:'$',fill:4,waste:12,import:18,wallU:450,wallO:900}, sShow:{fin:1,sub:1,eg:1,strip:1},
-  units:'m',
+  units:'m', parts:{},
   view:{s:3,ox:0,oy:0}, cam:{az:-0.7,el:0.55,dist:1,tx:0,ty:0,tz:0}, vex:1.6,
   hover:null,
 };
@@ -1305,6 +1300,118 @@ function buildFG(shift,bulk){
   }
   return fg;
 }
+/** The subgrade depth set for the daylight batter at this point, or null when
+ *  no part governs here. Only applies out along a part's daylight, not under
+ *  the part itself, which follows its own underside. */
+function partDaySubAt(x,y,runs){
+  for(const r of (runs||partRuns())){
+    if(!(r.a.daySub>0))continue;
+    const D=partDaylight(r.a.part,r.a.side), sgn=Math.sign(D.dx||1);
+    const dx=x-r.A.x, dy=y-r.A.y;
+    const s=dx*r.ux+dy*r.uy;
+    if(s<r.a.s0-1e-6||s>r.a.s1+1e-6)continue;
+    const t=(dx*r.nx+dy*r.ny)*sgn;
+    if(t<=Math.abs(D.dx))continue;                 // still on the part
+    const V={x:r.A.x+r.ux*s+r.nx*D.dx, y:r.A.y+r.uy*s+r.ny*D.dx,
+             z:r.A.z+(r.B.z-r.A.z)*(s/r.L)+D.dy};
+    const tt=toeAlong(r.p,V,{x:r.nx*sgn,y:r.ny*sgn},partBat(r.p,r.j));
+    if(t-Math.abs(D.dx)>tt.d)continue;              // past the toe
+    return r.a.daySub;
+  }
+  return null;
+}
+/** The part's cross-section at a plan point: the top of it and its underside,
+ *  or null where no part sits. partSurfaceAt gives only the walking surface;
+ *  this gives the solid, so the section can draw the part and the subgrade can
+ *  sit under it rather than jumping over it. */
+function partProfileAt(x,y,runs){
+  let best=null;
+  for(const r of (runs||partRuns())){
+    const D=partDaylight(r.a.part,r.a.side), sgn=Math.sign(D.dx||1);
+    const dx=x-r.A.x, dy=y-r.A.y;
+    const s=dx*r.ux+dy*r.uy;
+    let t, sAt=s;
+    if(s<r.a.s0-1e-6||s>r.a.s1+1e-6){
+      const past=s>r.a.s1;
+      if(past?!(r.a.s1>=r.L-0.01):!(r.a.s0<=0.01))continue;
+      if(!(past?r.mEnd:r.mStart))continue;
+      if(!inCornerSector(r,past,x,y))continue;
+      const Vc=past?r.B:r.A;
+      t=Math.hypot(x-Vc.x,y-Vc.y)*sgn;
+      sAt=past?r.a.s1:r.a.s0;
+    }else t=dx*r.nx+dy*r.ny;
+    const zs=r.A.z+(r.B.z-r.A.z)*(sAt/r.L);
+    const sd=r.a.side<0?-1:1;
+    const walk=ch=>{
+      for(let k=0;k<ch.length-1;k++){
+        const q0=[ch[k][0]*sd,ch[k][1]], q1=[ch[k+1][0]*sd,ch[k+1][1]];
+        const lo=Math.min(q0[0],q1[0]), hi=Math.max(q0[0],q1[0]);
+        if(t<lo-1e-9||t>hi+1e-9)continue;
+        const span=q1[0]-q0[0];
+        const yy=Math.abs(span)<1e-9?[q0[1],q1[1]]
+                :[q0[1]+(q1[1]-q0[1])*((t-q0[0])/span)];
+        for(const v of yy){
+          const z=zs+v;
+          if(!best)best={top:z,bot:z,col:r.a.part.colour||'#A6A79F'};
+          else{if(z>best.top)best.top=z; if(z<best.bot)best.bot=z;}
+        }
+      }
+    };
+    walk(r.a.part.exposed);
+    if(r.a.part.hidden&&r.a.part.hidden.length>1)walk(r.a.part.hidden);
+    // the chains describe the primary shape only — a foundation course lives in
+    // the layers and can reach deeper and wider, so walk those too or the
+    // subgrade sits on the kerb rather than under its bedding
+    for(const Ly of (r.a.part.layers||[]))
+      if(Ly.poly&&Ly.poly.length>1){walk(Ly.poly);walk([Ly.poly[Ly.poly.length-1],Ly.poly[0]]);}
+  }
+  return best;
+}
+/** The finished level at a point, solved straight from the design — the same
+ *  reasoning buildFG does per cell, but for one place and with no grid in the
+ *  way. The section uses this so a cut reads the same whatever the analysis
+ *  grid is set to; the grid stays the volume engine, where cells are the point.
+ *  Returns null where the design does not reach, so the caller falls back. */
+function designAt(x,y,bulk){
+  const C=S.cache; if(!C)return null;
+  if(S.boundary&&!inPoly(x,y,S.boundary))return null;   // the boundary is hard
+  const real=S.pads.filter(q=>!q.isBoundary&&q.pts.length>=3);
+  if(!real.length)return null;
+  for(const p of real)if(inPoly(x,y,p.pts))return padZ(p,x,y)-(bulk?(p.depth||0):0);
+  // otherwise the nearest feature owns this ground, and we are on its batter
+  let best=null;
+  for(const p of real){
+    const nr=nearestOnPoly(x,y,p.pts);
+    if(!best||nr.d2<best.nr.d2)best={p,nr};
+  }
+  if(!best)return null;
+  const p=best.p, nr=best.nr, d=Math.sqrt(nr.d2);
+  const g=egAt(x,y);
+  // off the pads, the boundary's own construction depth governs — that field is
+  // "everywhere but the pads", so batters and the ground between strings carry
+  // it just as the grid applies it
+  const bp=boundaryPad();
+  const bdep=bulk&&bp?(bp.depth||0):0;
+  // a part on this string governs: the ground leaves from its daylight point,
+  // at the part's own slope, and past its toe the earthworks are finished
+  const run=partRun(p,nr.b,edgeLen(p,(nr.b-1+p.pts.length)%p.pts.length));
+  if(run){
+    const D=partDaylight(run.part,run.side), sp=partBat(p,nr.b);
+    const nd=edgeNormalOut(p,(nr.b-1+p.pts.length)%p.pts.length);
+    const V={x:nr.x+nd.x*D.dx, y:nr.y+nd.y*D.dx, z:nr.z+D.dy};
+    const out=d-Math.abs(D.dx);
+    if(out<=0)return null;                       // the part itself covers this
+    const t=toeAlong(p,V,nd,sp);
+    if(out>=t.d)return g;                        // past the toe: undisturbed
+    return V.z+(t.z-V.z)*(out/t.d)-bdep;
+  }
+  const ov=(p.segBat&&p.pts[nr.b]&&p.pts[nr.b].id!=null)?p.segBat[p.pts[nr.b].id]:null;
+  let bc=p.bCut??S.bCut, bf=p.bFill??S.bFill;
+  if(ov){ if(ov.wall){bc=bf=0.0001;} else {if(ov.cut)bc=ov.cut; if(ov.fill)bf=ov.fill;} }
+  const z=nr.z;
+  const fgv = z>=g ? Math.max(z-d/bf,g) : Math.min(z+d/bc,g);
+  return fgv-bdep;
+}
 function volumeOf(fg,base){
   const C=S.cache, A=C.cell*C.cell, B=base||C.eg;
   let cut=0,fill=0;
@@ -1325,6 +1432,8 @@ function rebuild(geom){
   S.fgFin=buildFG(null,false);
   S.hasDepth=S.pads.some(p=>(p.depth||0)>0.001);
   S.fgBulk=S.hasDepth?buildFG(null,true):S.fgFin;
+  applyPartsToGrid(S.fgFin,false);
+  if(S.fgBulk!==S.fgFin)applyPartsToGrid(S.fgBulk,true);
   // the construction extent is where the design actually moves the ground, plus
   // the pads themselves — not the area the batter search had to look through
   S.extent=new Uint8Array(C.eg.length);
@@ -1532,8 +1641,8 @@ const SELOPTS={
           ft:[['6.096','20 ft'],['7.62','25 ft'],['15.24','50 ft'],['30.48','100 ft']]},
   snap  :{m :[['0','no snap'],['0.5','0.50 m'],['1','1 m'],['5','5 m']],
           ft:[['0','no snap'],['0.3048','1 ft'],['1.524','5 ft'],['3.048','10 ft']]},
-  gCell :{m :[['0.2','0.20 m'],['0.25','0.25 m'],['0.4','0.40 m'],['0.5','0.50 m'],['1','1.00 m']],
-          ft:[['0.1524','0.5 ft'],['0.3048','1 ft'],['0.6096','2 ft'],['0.9144','3 ft']]},
+  gCell :{m :[['1','1.00 m'],['0.5','0.50 m'],['0.2','0.20 m'],['0.1','0.10 m'],['0.05','0.05 m — heavy'],['0.025','0.025 m — very heavy']],
+          ft:[['0.9144','3 ft'],['0.4572','18 in'],['0.2032','8 in'],['0.1016','4 in'],['0.0508','2 in — heavy'],['0.0254','1 in — very heavy']]},
   exRes :{m :[['0.5','0.5 m — heavy'],['1','1 m — matches the volumes here'],['2','2 m'],['5','5 m — light']],
           ft:[['0.3048','1 ft — heavy'],['0.9144','3 ft — matches the volumes here'],['1.524','5 ft'],['3.048','10 ft — light']]}
 };
@@ -1786,6 +1895,9 @@ function drawEditor(){
       `<div class="kv"><span>${T('To')}</span><span>${uL(B.z,3)}</span></div>`+
       `<button class="wide" id="bsSplit">${T('Add a point mid-way')}</button>`;
   }else if(k==='edge'&&p.pts.length>1){
+    // a part remembers which end is its zero, so the string opens that way round
+    const pOv0=segOv(p,S.sel.i);
+    if(pOv0&&pOv0.part&&S.sel.rev===undefined)S.sel.rev=!!pOv0.rev;
     const i=S.sel.i, rv=!!S.sel.rev, ee=edgeEnds(p,i,rv), A=ee.a, B=ee.b;
     const n=p.pts.length, ia=rv?(i+1)%n:i, ib=rv?i:(i+1)%n;
     const sgOv=segOv(p,i);
@@ -1803,16 +1915,61 @@ function drawEditor(){
       `<div class="row" style="margin-top:5px">
          <input type="number" id="eAtD" step="0.5" min="0" placeholder="${U().lab} ${T('from green')}">
          <button id="eAtGo" style="flex:.6">${T('Add')}</button></div>`+
-      `<label class="f">${T('Batter on this edge only')}</label>`+
-      `<div class="g2">
-         <div><input type="number" id="sgCut" step="0.5" min="0.5" placeholder="${(p.bCut??S.bCut)}"
-              value="${(sgOv&&sgOv.cut)||''}"></div>
-         <div><input type="number" id="sgFill" step="0.5" min="0.5" placeholder="${(p.bFill??S.bFill)}"
-              value="${(sgOv&&sgOv.fill)||''}"></div>
-       </div>`+
-      `<p class="hint">${T('Cut and fill, 1V : n. Leave blank to follow the pad.')}</p>`+
+      (`<label class="f">${T('Batter on this edge only')}</label>`+
+        `<div class="g2">
+           <div><input type="number" id="sgCut" step="0.5" min="0.5" placeholder="${(p.bCut??S.bCut)}"
+                value="${(sgOv&&sgOv.cut)||''}"></div>
+           <div><input type="number" id="sgFill" step="0.5" min="0.5" placeholder="${(p.bFill??S.bFill)}"
+                value="${(sgOv&&sgOv.fill)||''}"></div>
+         </div>`+
+        `<p class="hint">${T('Cut and fill, 1V : n. Leave blank to follow the pad.')}</p>`)+
       `<label class="chk"><input type="checkbox" id="sgWall" ${(sgOv&&sgOv.wall)?'checked':''}>`+
       `${T('Retain this edge instead of battering it')}</label>`+
+      (()=>{                                       // a part attached to this string
+        const ks=Object.keys(S.parts); if(!ks.length)return '';
+        const cur=(sgOv&&sgOv.part)||'', L=edgeLen(p,i);
+        const from=(sgOv&&+sgOv.from)||0, to=(sgOv&&sgOv.to!=null)?+sgOv.to:L;
+        return `<label class="f">${T('Part on this string')}</label>`+
+        `<div class="row"><select id="sgPart" style="flex:1.4">`+
+          `<option value="">${T('none')}</option>`+
+          ks.map(k=>`<option value="${k}"${k===cur?' selected':''}>${S.parts[k].name}</option>`).join('')+
+        `</select>`+
+        `<button id="sgSide" style="flex:.55" title="${T('Put it on the other side of the string')}"${cur?'':' disabled'}>⇋</button></div>`+
+        (cur?`<div class="g2" style="margin-top:5px">
+           <div><label class="f">${T('Starts')}</label>
+             <input type="number" id="sgFrom" step="0.5" min="0" value="${toDisp(from).toFixed(2)}"></div>
+           <div><label class="f">${T('Ends')}</label>
+             <input type="number" id="sgTo" step="0.5" min="0" value="${toDisp(to).toFixed(2)}"></div>
+         </div>`+
+         `<input type="range" id="sgRange" min="0" max="${toDisp(L).toFixed(2)}" step="0.01"
+                 value="${toDisp(to).toFixed(2)}" style="width:100%;margin-top:4px">`+
+         `<button class="wide" id="sgFull">${T('Run the full string')}</button>`+
+         `<label class="f">${T('Daylight off the part, 1V : n')}</label>`+
+         `<div class="g2">
+            <div><input type="number" id="sgDayCut" step="0.5" min="0.5" placeholder="${edgeBat(p,(i+1)%p.pts.length).bc}"
+                 value="${(sgOv&&sgOv.dayCut)||''}"></div>
+            <div><input type="number" id="sgDayFill" step="0.5" min="0.5" placeholder="${edgeBat(p,(i+1)%p.pts.length).bf}"
+                 value="${(sgOv&&sgOv.dayFill)||''}"></div>
+          </div>`+
+         `<p class="hint">${T('Cut then fill, from the part\'s daylight point outwards. Applies only where the part runs — the rest of the string keeps the batter above.')}</p>`+
+         `<label class="f">${T('Subgrade below the daylight')}</label>`+
+         `<input type="number" id="sgDaySub" step="0.05" min="0"
+                value="${(sgOv&&sgOv.daySub)?toDisp(sgOv.daySub).toFixed(3):''}" placeholder="0">`+
+         `<p class="hint">${T('How far the formation sits under the daylight batter. Blank means none.')}</p>`+
+         `<p class="hint">${T('Distances run from the green end, fixed when the part went on. Press ⇄ to move the zero.')} `+
+         `${T('Side')}: ${((sgOv&&sgOv.side)||1)<0?T('left'):T('right')}</p>`+
+         (()=>{                                    // what the daylight is actually doing
+           const P=S.parts[cur]; if(!P)return '';
+           const sp=partBat(p,(i+1)%p.pts.length), D=partDaylight(P,(sgOv&&sgOv.side)||1);
+           const nd=edgeNormalOut(p,i), A0=p.pts[i], B0=p.pts[(i+1)%p.pts.length];
+           const mid={x:(A0.x+B0.x)/2+nd.x*D.dx, y:(A0.y+B0.y)/2+nd.y*D.dx, z:(A0.z+B0.z)/2+D.dy};
+           const t=toeAlong(p,mid,nd,sp);
+           const g=egAt(mid.x,mid.y), fill=mid.z>=g;
+           return `<p class="hint">${T('Daylight')}: 1V : ${fill?sp.bf:sp.bc} (${fill?T('fill'):T('cut')}) · `+
+             `${T('reaches ground')} ${uL(D.dx+t.d,2)} ${T('out')}`+
+             (t.clipped?` · <b>${T('stopped at the site boundary')}</b>`:'')+`</p>`;
+         })():'');
+      })()+
       `<div class="kv"><span>${T('Length')}</span><span>${uL(edgeLen(p,i))}</span></div>`+
       `<div class="kv"><span>${T('From')}</span><span>${uL(A.z,3)}</span></div>`+
       `<div class="kv"><span>${T('To')}</span><span>${uL(B.z,3)}</span></div>`;
@@ -1935,17 +2092,64 @@ function wireEditor(){
     push();b.pts.splice(i+1,0,{x:+((A.x+B.x)/2).toFixed(3),y:+((A.y+B.y)/2).toFixed(3),z:+((A.z+B.z)/2).toFixed(3)});
     S.sel={kind:'bp',b:S.sel.b,i:i+1};p.tris=null;p._pp=null;rebuild(true);};
   const setSeg=()=>{
-    const si=segKey(p,S.sel.i);
-    const c=parseFloat($('sgCut').value), f=parseFloat($('sgFill').value);
+    const si=segKey(p,S.sel.i); if(si==null)return;
+    const c=parseFloat($('sgCut')&&$('sgCut').value), f=parseFloat($('sgFill')&&$('sgFill').value);
     const w=$('sgWall')&&$('sgWall').checked;
     p.segBat=p.segBat||{};
-    if(isFinite(c)||isFinite(f)||w)p.segBat[si]={cut:isFinite(c)?c:0,fill:isFinite(f)?f:0,wall:!!w};
-    else delete p.segBat[si];
+    // merge — a string override can carry a part as well as a batter, and
+    // rebuilding the object from the batter fields alone would wipe the part
+    const o=p.segBat[si]||{};
+    if(isFinite(c))o.cut=c; else delete o.cut;
+    if(isFinite(f))o.fill=f; else delete o.fill;
+    if(w)o.wall=true; else delete o.wall;
+    if(o.cut===undefined&&o.fill===undefined&&!o.wall&&!o.part)delete p.segBat[si];
+    else p.segBat[si]=o;
     rebuild(true);
   };
   const sgc=$('sgCut'); if(sgc)sgc.onchange=()=>{push();setSeg();};
   const sgf=$('sgFill'); if(sgf)sgf.onchange=()=>{push();setSeg();};
   const sgw=$('sgWall'); if(sgw)sgw.onchange=()=>{push();setSeg();};
+  // the part on this string: which one, which side, and how far it runs
+  const segSet=(f)=>{
+    const si=segKey(p,S.sel.i); if(si==null)return;
+    push();
+    p.segBat=p.segBat||{};
+    const o=p.segBat[si]||(p.segBat[si]={});
+    f(o);
+    if(!o.part&&!o.cut&&!o.fill&&!o.wall)delete p.segBat[si];
+    rebuild(true);drawEditor();
+  };
+  const sp=$('sgPart');
+  if(sp)sp.onchange=e=>segSet(o=>{
+    const v=e.target.value;
+    if(!v){delete o.part;delete o.side;delete o.from;delete o.to;}
+    else{o.part=v;o.side=o.side||1;o.from=0;o.to=null;o.rev=!!S.sel.rev;}  // full length, zero fixed at the end that is green now
+  });
+  const ss=$('sgSide');
+  if(ss)ss.onclick=()=>segSet(o=>{o.side=(o.side||1)<0?1:-1;});
+  const L0=edgeLen(p,S.sel.i);
+  const sfr=$('sgFrom');
+  if(sfr)sfr.onchange=e=>segSet(o=>{o.from=Math.max(0,Math.min(L0,fromDisp(+e.target.value||0)));});
+  const sto=$('sgTo');
+  if(sto)sto.onchange=e=>segSet(o=>{o.to=Math.max(0,Math.min(L0,fromDisp(+e.target.value||0)));});
+  const srg=$('sgRange');
+  if(srg)srg.oninput=e=>{const v=fromDisp(+e.target.value);
+    const si=segKey(p,S.sel.i); if(si==null)return;
+    p.segBat=p.segBat||{}; const o=p.segBat[si]||(p.segBat[si]={});
+    o.to=Math.max(0,Math.min(L0,v)); const f=$('sgTo'); if(f)f.value=(+e.target.value).toFixed(2);
+    rebuild(true);
+  };
+  const dc=$('sgDayCut');
+  if(dc)dc.onchange=e=>segSet(o=>{const v=parseFloat(e.target.value);
+    if(isFinite(v)&&v>0)o.dayCut=v; else delete o.dayCut;});
+  const df=$('sgDayFill');
+  if(df)df.onchange=e=>segSet(o=>{const v=parseFloat(e.target.value);
+    if(isFinite(v)&&v>0)o.dayFill=v; else delete o.dayFill;});
+  const dsb=$('sgDaySub');
+  if(dsb)dsb.onchange=e=>segSet(o=>{const v=fromDisp(parseFloat(e.target.value));
+    if(isFinite(v)&&v>0)o.daySub=v; else delete o.daySub;});
+  const sfl=$('sgFull');
+  if(sfl)sfl.onclick=()=>segSet(o=>{o.from=0;o.to=null;});
   const dpp=$('eDrapeP'); if(dpp)dpp.onclick=()=>drapeString('pad');
   const dpg=$('eDrapeG'); if(dpg)dpg.onclick=()=>drapeString('ground');
   const spl=$('eSplit');
@@ -1976,7 +2180,14 @@ function wireEditor(){
     note('Stake set '+d.toFixed(2)+' '+U().lab+' from the green end');
   };
   const esw=$('eSwap');
-  if(esw)esw.onclick=()=>{S.sel.rev=!S.sel.rev;drawEditor();draw();};
+  if(esw)esw.onclick=()=>{
+    S.sel.rev=!S.sel.rev;
+    const si=segKey(p,S.sel.i);                   // keep the part's zero in step
+    if(si!=null&&p.segBat&&p.segBat[si]&&p.segBat[si].part){
+      push();p.segBat[si].rev=!!S.sel.rev;rebuild(true);
+    }
+    drawEditor();draw();
+  };
   document.querySelectorAll('[data-dz]').forEach(b=>b.onclick=()=>{
     push();p.pts.forEach(q=>q.z=+(q.z+fromDisp(+b.dataset.dz)).toFixed(3));rebuild();});
   const bdr=$('bDrape');
@@ -2212,6 +2423,30 @@ function drawPlan(){
       cx.stroke();
     }
   }
+  // parts attached to strings: a band on whichever side they sit, over the run
+  S.pads.forEach(p=>{
+    if(!p.segBat||p.pts.length<2)return;
+    const n=p.pts.length, cw=signedArea(p.pts)<0;
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n, a=partRun(p,j,edgeLen(p,i));
+      if(!a)continue;
+      const A=p.pts[i],B=p.pts[j];
+      const L=Math.hypot(B.x-A.x,B.y-A.y)||1;
+      const ux=(B.x-A.x)/L, uy=(B.y-A.y)/L;
+      let nx2=uy,ny2=-ux; if(cw){nx2=-nx2;ny2=-ny2;}      // outward from the pad
+      const s=a.side<0?-1:1, w=partReach(a.part)*s;
+      const P0={x:A.x+ux*a.s0, y:A.y+uy*a.s0};
+      const P1={x:A.x+ux*a.s1, y:A.y+uy*a.s1};
+      cx.beginPath();
+      cx.moveTo(PX(P0.x),PY(P0.y));
+      cx.lineTo(PX(P1.x),PY(P1.y));
+      cx.lineTo(PX(P1.x+nx2*w),PY(P1.y+ny2*w));
+      cx.lineTo(PX(P0.x+nx2*w),PY(P0.y+ny2*w));
+      cx.closePath();
+      cx.fillStyle=(a.part.colour||'#A6A79F')+'cc';cx.fill();
+      cx.strokeStyle='#0d1218';cx.lineWidth=1;cx.stroke();
+    }
+  });
   if(S.cLabels){labelContours(S.egCont,'#8fdcff','#0b1a24');labelContours(S.cont,'#ffe6a8','#2a2008');}
   // pads — boundary first so its colour wash sits UNDER the pads, never over them
   const drawOrder=S.pads.map((p,i)=>i).sort((a,b)=>(S.pads[a].isBoundary?0:1)-(S.pads[b].isBoundary?0:1));
@@ -2413,6 +2648,11 @@ function proj3(x,y,z){
 function draw3D(){
   const C=S.cache; if(!C)return;
   const step=Math.max(1,Math.round(1.6/C.cell));      // ~1.6 m base mesh
+  // Detail quads stop at ~0.4 m however fine the analysis grid is. Following the
+  // grid all the way down put 256 quads into every busy block at 0.1 m and 1024
+  // at 0.05 m, which is what makes the view crawl — and none of it is visible at
+  // this scale. The export is where the fine geometry lives.
+  const sub=Math.max(1,Math.min(step,Math.round(0.4/C.cell)));
   const tris=[];
   const DETAIL=0.20;                                  // subdivide once a quad moves this much
   const cells=[];
@@ -2430,7 +2670,7 @@ function draw3D(){
     // steep, broken, or straddling the daylight line: use every cell, so the
     // colour stops where the earthworks stop rather than a mesh quad later
     if(hi-lo>DETAIL||mix){
-      for(let dj=0;dj<step;dj++)for(let di=0;di<step;di++)cells.push([i+di,j+dj,1]);
+      for(let dj=0;dj<step;dj+=sub)for(let di=0;di<step;di+=sub)cells.push([i+di,j+dj,sub]);
     }else cells.push([i,j,step]);
   }
   for(const [i,j,step2] of cells){
@@ -2478,6 +2718,51 @@ function draw3D(){
       if(!cl.length)cl=null;
     }
     tris.push({d:(pA.d+pC.d)/2,p:[pA,pB,pC,pD],c:`rgb(${r},${g2},${b2})`,cl});
+  }
+  // Parts sit far below the 1.6 m mesh, so they are drawn as their own solid
+  // geometry rather than sampled — a 125 mm kerb would vanish otherwise. They
+  // join the same depth-sorted list, so they occlude and are occluded properly.
+  for(const r of partRuns()){
+    const NS=Math.max(1,Math.min(80,Math.ceil((r.a.s1-r.a.s0)/1.0)));
+    const col=r.a.part.colour||'#A6A79F';
+    const cr=parseInt(col.slice(1,3),16),cg=parseInt(col.slice(3,5),16),cb=parseInt(col.slice(5,7),16);
+    const at=s=>({x:r.A.x+r.ux*s, y:r.A.y+r.uy*s, z:r.A.z+(r.B.z-r.A.z)*(s/r.L)});
+    for(let t=0;t<NS;t++){
+      const sA=r.a.s0+(r.a.s1-r.a.s0)*(t/NS), sB=r.a.s0+(r.a.s1-r.a.s0)*((t+1)/NS);
+      const WA=at(sA), WB=at(sB);
+      // the first and last columns sit on the corner mitre, same as the export
+      const mA=(t===0&&r.a.s0<=0.005)?cornerMitre(r.p,r.i):null;
+      const mB=(t===NS-1&&r.a.s1>=r.L-0.005)?cornerMitre(r.p,r.j):null;
+      const px=(W,q,m)=>m?W.x+m.dir.x*q[0]*m.k:W.x+r.nx*q[0];
+      const py=(W,q,m)=>m?W.y+m.dir.y*q[0]*m.k:W.y+r.ny*q[0];
+      for(let k=0;k<r.chain.length-1;k++){
+        const q0=r.chain[k], q1=r.chain[k+1];
+        const P=[
+          proj3(px(WA,q0,mA), py(WA,q0,mA), WA.z+q0[1]),
+          proj3(px(WA,q1,mA), py(WA,q1,mA), WA.z+q1[1]),
+          proj3(px(WB,q1,mB), py(WB,q1,mB), WB.z+q1[1]),
+          proj3(px(WB,q0,mB), py(WB,q0,mB), WB.z+q0[1])];
+        if(P.some(v=>!v))continue;
+        // a vertical face reads darker than a top, so the shape stays legible
+        const vert=Math.abs(q1[0]-q0[0])<1e-6, sh=vert?0.72:1.12;
+        const rr=Math.min(255,cr*sh)|0, gg=Math.min(255,cg*sh)|0, bb=Math.min(255,cb*sh)|0;
+        tris.push({d:(P[0].d+P[2].d)/2,p:P,c:`rgb(${rr},${gg},${bb})`,cl:null});
+      }
+      // the batter running on from the part's daylight point. The grid knows
+      // nothing about parts, so the mesh beneath still grades from the pad edge
+      // — without this the daylight looks ignored even though the export is right.
+      const D=partDaylight(r.a.part,r.a.side), sp=partBat(r.p,r.j);
+      const dl=W=>({x:W.x+r.nx*D.dx, y:W.y+r.ny*D.dx, z:W.z+D.dy});
+      const VA=dl(WA), VB=dl(WB);
+      const tA=toeAlong(r.p,VA,{x:r.nx,y:r.ny},sp), tB=toeAlong(r.p,VB,{x:r.nx,y:r.ny},sp);
+      if(tA.d>0.01||tB.d>0.01){
+        const P=[proj3(VA.x,VA.y,VA.z), proj3(VB.x,VB.y,VB.z),
+                 proj3(tB.x,tB.y,tB.z), proj3(tA.x,tA.y,tA.z)];
+        if(!P.some(v=>!v)){
+          tris.push({d:(P[0].d+P[2].d)/2,p:P,c:'rgb(150,140,110)',cl:null});
+        }
+      }
+    }
   }
   tris.sort((a,b)=>b.d-a.d);
   for(const t of tris){
@@ -2541,17 +2826,50 @@ function sectionData(){
   if(!S.sect||!S.cache)return null;
   const {ax,ay,bx,by}=S.sect;
   const L=Math.hypot(bx-ax,by-ay); if(L<1)return null;
-  const step=Math.max(S.cache.cell/2,L/600), n=Math.max(2,Math.ceil(L/step));
-  const ch=[],fin=[],sub=[],eg=[],st=[];
+  // The grid is sampled at half a cell, which is plenty for ground and pads but
+  // steps straight over a 125 mm kerb. When parts are attached, sample as fine
+  // as the strip allows so their faces actually land on a station.
+  // The section is solved from the design, not sampled off the grid, so its
+  // resolution no longer has anything to do with the analysis grid — a cut reads
+  // the same at 1 m as at 0.05 m. Sample fine enough to catch a kerb.
+  const step=Math.max(0.01,L/600), n=Math.max(2,Math.ceil(L/step));
+  const ch=[],fin=[],sub=[],eg=[],st=[],ptop=[],pbot=[],inb=[];
+  // Inside a pad the design level is known exactly, so read it rather than the
+  // grid — the grid can only place the pad edge to the nearest cell, which blurs
+  // the edge by roughly a cell whatever the density. Off the pads the grid is
+  // still the right source, because that is where the batters are solved.
+  const real=S.pads.filter(q=>!q.isBoundary&&q.pts.length>=3);
+  const padAt=(x,y)=>{
+    for(const q of real)if(inPoly(x,y,q.pts))return q;
+    return null;
+  };
   for(let k=0;k<=n;k++){
     const t=k/n, x=ax+(bx-ax)*t, y=ay+(by-ay)*t;
     ch.push(L*t);
-    fin.push(sampleGrid(S.fgFin,x,y));
-    sub.push(sampleGrid(S.fgBulk,x,y));
-    eg.push(sampleGrid(S.cache.eg,x,y));
+    const pz=partSurfaceAt(x,y);                 // a kerb or wall the cut crosses
+    const dz=designAt(x,y,false);                // solved from the design, not the grid
+    const dzb=designAt(x,y,true);
+    // beyond the design it is just ground, so read the survey itself rather than
+    // the analysis grid's resampled copy — that copy changes with the cell size
+    const gz=egAt(x,y);
+    const inSite=!S.boundary||inPoly(x,y,S.boundary);
+    inb.push(inSite);
+    fin.push(pz!==null?pz:(dz!==null?dz:gz));
+    // A part is a solid sitting on the works, so the subgrade belongs UNDER it,
+    // not over the top of it. Where the cut crosses a part, take its underside.
+    const pf=partProfileAt(x,y);
+    ptop.push(pf?pf.top:null);
+    pbot.push(pf?pf.bot:null);
+    // under the part itself the formation follows its underside; along the
+    // daylight batter beyond it, it runs the set depth below the finished line
+    const ds=partDaySubAt(x,y);
+    sub.push(pf?pf.bot
+            :(ds!==null&&dz!==null?dz-ds
+            :(dzb!==null?dzb:gz)));
+    eg.push(gz);
     st.push(sampleGrid(S.egStrip,x,y));
   }
-  return {L,ch,fin,sub,eg,st};
+  return {L,ch,fin,sub,eg,st,ptop,pbot,inb};
 }
 function drawSection(){
   const box=$('sect');
@@ -2575,6 +2893,10 @@ function drawSection(){
     sx2.fillText(T('Tick a surface to see it'),w/2,h/2);sx2.textAlign='left';return;}
   let lo=Infinity,hi=-Infinity;
   for(const a of sets)for(const v of a){if(v<lo)lo=v;if(v>hi)hi=v;}
+  // leave room for any part the cut crosses, or a wall gets clipped off the top
+  for(const a of [d.ptop,d.pbot])if(a)for(const v of a){
+    if(v==null)continue; if(v<lo)lo=v; if(v>hi)hi=v;
+  }
   const pad=Math.max(0.25,(hi-lo)*0.15); lo-=pad; hi+=pad;
   const ml=52,mr=12,mt=8,mb=20;
   const X=c=>ml+(c/d.L)*(w-ml-mr), Y=z=>h-mb-((z-lo)/(hi-lo))*(h-mt-mb);
@@ -2596,17 +2918,43 @@ function drawSection(){
     sx2.fillStyle='#6d7885';sx2.fillText(toDisp(c).toFixed(0),x,h-6);
   }
   sx2.textAlign='left';
-  const line=(arr,col,wid,dash)=>{
+  const line=(arr,col,wid,dash,clip)=>{
     sx2.strokeStyle=col;sx2.lineWidth=wid;sx2.setLineDash(dash||[]);
     sx2.beginPath();
-    arr.forEach((z,k)=>k?sx2.lineTo(X(d.ch[k]),Y(z)):sx2.moveTo(X(d.ch[k]),Y(z)));
+    let pen=false;
+    arr.forEach((z,k)=>{
+      // the finished and subgrade lines belong to the works: past the site
+      // boundary there is only existing ground, so lift the pen there
+      if(clip&&d.inb&&!d.inb[k]){pen=false;return;}
+      if(!pen){sx2.moveTo(X(d.ch[k]),Y(z));pen=true;}
+      else sx2.lineTo(X(d.ch[k]),Y(z));
+    });
     sx2.stroke();sx2.setLineDash([]);
   };
+  // any part the cut crosses, drawn as the solid it is — top and underside, so
+  // a kerb or a wall reads as a body rather than a kink in the finished line
+  if(d.ptop){
+    let k=0;
+    while(k<d.ch.length){
+      if(d.ptop[k]==null){k++;continue;}
+      let e=k; while(e+1<d.ch.length&&d.ptop[e+1]!=null)e++;
+      if(e>k){
+        sx2.beginPath();
+        for(let q=k;q<=e;q++)q===k?sx2.moveTo(X(d.ch[q]),Y(d.ptop[q])):sx2.lineTo(X(d.ch[q]),Y(d.ptop[q]));
+        for(let q=e;q>=k;q--)sx2.lineTo(X(d.ch[q]),Y(d.pbot[q]));
+        sx2.closePath();
+        sx2.fillStyle='rgba(200,190,160,.55)';sx2.fill();
+        sx2.strokeStyle='#e8ddc0';sx2.lineWidth=1.4;sx2.stroke();
+      }
+      k=e+1;
+    }
+  }
   // cut and fill hatch between the two that matter
   if(on.sub&&on.strip){
     for(let k=1;k<d.ch.length;k++){
       const dz=(d.sub[k]-d.st[k]);
       if(Math.abs(dz)<=DEAD)continue;
+      if(d.inb&&(!d.inb[k]||!d.inb[k-1]))continue;   // works only, not past the boundary
       sx2.fillStyle=dz<0?'rgba(224,110,90,.20)':'rgba(110,190,110,.20)';
       sx2.beginPath();
       sx2.moveTo(X(d.ch[k-1]),Y(d.st[k-1]));sx2.lineTo(X(d.ch[k]),Y(d.st[k]));
@@ -2616,8 +2964,8 @@ function drawSection(){
   }
   if(on.eg)line(d.eg,'#5cc26a',1.8);
   if(on.strip)line(d.st,'#3f8f52',1.3,[5,4]);
-  if(on.fin)line(d.fin,'#ffd166',2);
-  if(on.sub)line(d.sub,'#f2905c',1.4,[6,3]);
+  if(on.fin)line(d.fin,'#ffd166',2,null,true);
+  if(on.sub)line(d.sub,'#f2905c',1.4,[6,3],true);
   $('sectInfo').textContent=uL(d.L,1)+'   ·   '+lo.toFixed(2)+'–'+uL(hi)+'';
 }
 addEventListener('resize',()=>{if(S.sect)drawSection();});
@@ -3137,6 +3485,280 @@ function daylightAt(p,i){
   return {x:V.x+nrm.x*d, y:V.y+nrm.y*d, z:gx, d};
 }
 
+/* ── parts ─────────────────────────────────────────────────────────────────
+   A part is a cross-section from Parts Solver. Its geometry is given relative
+   to the attach point at the origin: x is the horizontal offset out from the
+   string, y is up. A part attaches to a string, runs its full length to begin
+   with, and can then be trimmed. It occupies the ground from the string out to
+   its daylight point; beyond that the normal batter takes over.            */
+function addPart(d){
+  if(!d||!Array.isArray(d.exposedChain)||d.exposedChain.length<2){
+    note('That part has no exposed shape',true);return;
+  }
+  const code=d.code||d.part||('PART'+(Object.keys(S.parts).length+1));
+  S.parts[code]={code, name:d.name||code, colour:d.colour||'#A6A79F',
+    width:+d.width||0, depth:+d.depth||0,
+    exposed:d.exposedChain.map(q=>[+q[0],+q[1]]),
+    hidden:(d.hiddenChain||[]).map(q=>[+q[0],+q[1]]),
+    layers:(d.layers||[]).map(L=>({name:L.name||('Layer '+L.index),area:+L.area||0,
+      poly:(L.poly||[]).map(q=>[+q[0],+q[1]])})),
+    daylight:d.daylight&&d.daylight.point?[+d.daylight.point[0],+d.daylight.point[1]]:null,
+    totalArea:+d.totalArea||0};
+  drawParts();
+  note('Part loaded — '+S.parts[code].name);
+}
+/** the part as it sits on a string: x mirrored when it is on the other side */
+function partChain(part,side){
+  const s=side<0?-1:1;
+  return part.exposed.map(q=>[q[0]*s,q[1]]);
+}
+/** how far out from the string the part reaches (its daylight offset) */
+function partReach(part){
+  let w=0; for(const q of part.exposed)w=Math.max(w,Math.abs(q[0]));
+  return w;
+}
+/** the daylight end of the exposed chain — where the batter takes over. The
+ *  chain is given daylight-first, attach-last. */
+function partDaylight(part,side){
+  const q=part.exposed[0]||[0,0], s=side<0?-1:1;
+  return {dx:q[0]*s, dy:q[1]};
+}
+/** does a part cover this whole string? then the string raises no skirt of its
+ *  own — the part's daylight point does it instead. */
+function partCoversAll(p,j,L){
+  const a=partRun(p,j,L);
+  return !!(a && a.s0<=0.005 && a.s1>=L-0.005);
+}
+/** the part attached to the string ending at outline vertex j, or null */
+function segPart(p,j){
+  const id=p.pts[j]&&p.pts[j].id, o=(p.segBat&&id!=null)?p.segBat[id]:null;
+  if(!o||!o.part)return null;
+  const part=S.parts[o.part]; if(!part)return null;
+  return {part, side:o.side||1, from:+o.from||0, to:(o.to==null?null:+o.to),
+    rev:!!o.rev, taper:+o.taper||0, daySub:+o.daySub||0};
+}
+/** the run of the part along that string, clamped to the string it sits on.
+ *  from/to are held as distances from the ZERO end (the green stake). s0/s1 are
+ *  the same run measured from the string's first vertex, which is what the
+ *  geometry wants. */
+function partRun(p,j,L){
+  const a=segPart(p,j); if(!a)return null;
+  const from=Math.max(0,Math.min(a.from,L));
+  const to  =Math.min(L, a.to==null?L:a.to);
+  if(to-from<0.01)return null;
+  const s0=a.rev?L-to:from, s1=a.rev?L-from:to;
+  return {...a,from,to,s0,s1,L};
+}
+function drawParts(){
+  const box=$('partList'); if(!box)return;
+  const ks=Object.keys(S.parts);
+  if(!ks.length){box.innerHTML='<p class="hint">'+T('Drop a part from Parts Solver to add it here.')+'</p>';return;}
+  box.innerHTML=ks.map(k=>{const P=S.parts[k];
+    return `<div class="padrow"><span class="sw" style="background:${P.colour}"></span>`+
+      `<div style="flex:1"><b>${P.name}</b><div class="meta">${P.code} · `+
+      `${uL(P.width)} ${T('wide')} · ${P.layers.length} ${T('layers')}</div></div>`+
+      `<button data-delpart="${P.code}" class="x">×</button></div>`;}).join('');
+  box.querySelectorAll('[data-delpart]').forEach(b=>b.onclick=()=>{
+    const c=b.dataset.delpart;
+    for(const p of S.pads)if(p.segBat)for(const k in p.segBat)
+      if(p.segBat[k].part===c)delete p.segBat[k].part;
+    delete S.parts[c];drawParts();drawEditor();rebuild(true);
+  });
+}
+/** every attached part run, as world geometry: the string it sits on, its two
+ *  ends along that string, the outward normal, and the section chain already
+ *  mirrored for whichever side it is on. Shared by the 3D view, the section
+ *  and the TIN, so all three see the same parts. */
+function partRuns(){
+  const out=[];
+  for(const p of S.pads){
+    if(p.isBoundary||p.pts.length<3||!p.segBat)continue;
+    const n=p.pts.length, cw=signedArea(p.pts)<0;
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n, A=p.pts[i], B=p.pts[j];
+      const L=Math.hypot(B.x-A.x,B.y-A.y); if(L<1e-6)continue;
+      const a=partRun(p,j,L); if(!a)continue;
+      const ux=(B.x-A.x)/L, uy=(B.y-A.y)/L;
+      let nx=uy, ny=-ux; if(cw){nx=-nx;ny=-ny;}
+      const rr={p,i,j,jv:j,A,B,L,ux,uy,nx,ny,a,chain:partChain(a.part,a.side)};
+      rr.mStart=cornerMitre(p,i); rr.mEnd=cornerMitre(p,j);   // once, not per cell
+      out.push(rr);
+    }
+  }
+  return out;
+}
+/** Stamp attached parts, and the batter they daylight at, onto the analysis
+ *  grid. The grid is what the contours, the 3D mesh and the volumes are drawn
+ *  from, and it knows nothing about parts on its own — leave it out and the
+ *  contours trace the old pad batter while the TIN shows the part's daylight,
+ *  which reads as two surfaces sitting on top of each other. Only cells within
+ *  a run's own reach are visited, so this costs nothing when no parts are on. */
+function applyPartsToGrid(G,bulk){
+  const C=S.cache; if(!C||!G)return;
+  // this runs before topsoil is stripped, so untouched ground is written the
+  // same way buildFG writes it — natural level, less the boundary depth in bulk
+  const bp=boundaryPad(), bdep=bulk&&bp?(bp.depth||0):0;
+  const runs=partRuns(); if(!runs.length)return;
+  for(const r of runs){
+    const D=partDaylight(r.a.part,r.a.side), sp=partBat(r.p,r.j);
+    const fi=S.feats.indexOf(r.p);
+    // how far out this run can possibly reach: its own width plus the batter
+    let rise=0;
+    for(let k=0;k<=8;k++){
+      const s=r.a.s0+(r.a.s1-r.a.s0)*(k/8);
+      const zs=r.A.z+(r.B.z-r.A.z)*(s/r.L);
+      const V={x:r.A.x+r.ux*s+r.nx*D.dx, y:r.A.y+r.uy*s+r.ny*D.dx, z:zs+D.dy};
+      // measure from the STRING as well as the part's daylight point: the batter
+      // being erased is the pad's own, which is driven by the string's height
+      // over ground and can reach far beyond anything the part does
+      rise=Math.max(rise, Math.abs(V.z-egAt(V.x,V.y)),
+                          Math.abs(zs-egAt(r.A.x+r.ux*s, r.A.y+r.uy*s)));
+    }
+    const pad=edgeBat(r.p,r.j);                   // the batter the grid would otherwise run
+    const reach=Math.abs(D.dx)
+      +rise*Math.max(sp.bc,sp.bf,pad.bc,pad.bf)+C.cell*2;
+    // bounding box of the run plus that reach
+    const xs=[r.A.x+r.ux*r.a.s0, r.A.x+r.ux*r.a.s1], ys=[r.A.y+r.uy*r.a.s0, r.A.y+r.uy*r.a.s1];
+    const x0=Math.min(...xs)-reach, x1=Math.max(...xs)+reach;
+    const y0=Math.min(...ys)-reach, y1=Math.max(...ys)+reach;
+    const i0=Math.max(0,Math.floor((x0-C.x0)/C.cell)), i1=Math.min(C.nx-1,Math.ceil((x1-C.x0)/C.cell));
+    const j0=Math.max(0,Math.floor((y0-C.y0)/C.cell)), j1=Math.min(C.ny-1,Math.ceil((y1-C.y0)/C.cell));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){
+      const k=j*C.nx+i;
+      if(C.inb&&!C.inb[k])continue;                 // the boundary is still hard
+      const x=C.x0+i*C.cell, y=C.y0+j*C.cell;
+      const z=partSurfaceAt(x,y,[r]);
+      if(z!==null){G[k]=z;continue;}
+      // Past the part's daylight the earthworks are finished — a retaining wall
+      // holds the fill back, so the ground beyond it is undisturbed. Without
+      // this the pad's own batter carries on underneath and runs out to the
+      // boundary, which is what makes a wall look ignored.
+      if(C.pad[k]!==fi)continue;                    // another feature owns this ground
+      if(C.seg&&C.seg[k]!==r.jv)continue;           // and it must be THIS string's batter
+      if(C.dist[k]===0)continue;                    // never touch the pad itself
+      const ds=(x-r.A.x)*r.ux+(y-r.A.y)*r.uy;
+      // A corner wedge sits beyond the run's own span — the bisector carries you
+      // along the string as well as out from it — so where the part runs right
+      // to a string end, its hold on the ground continues round that corner.
+      // C.seg still limits this to ground the string itself owns.
+      const backS=(r.a.s0<=0.01)?reach:C.cell;
+      const backE=(r.a.s1>=r.L-0.01)?reach:C.cell;
+      if(ds<r.a.s0-backS||ds>r.a.s1+backE)continue;
+      // past an end, only the corner's own fan — never on down the next string
+      if(ds>r.a.s1+1e-6&&!(r.mEnd&&inCornerSector(r,true,x,y)))continue;
+      if(ds<r.a.s0-1e-6&&!(r.mStart&&inCornerSector(r,false,x,y)))continue;
+      const dt=(x-r.A.x)*r.nx+(y-r.A.y)*r.ny;
+      if(dt*Math.sign(D.dx||1)<=0)continue;         // only outboard of the string
+      G[k]=C.eg[k]-((bdep&&C.inb&&C.inb[k])?bdep:0);
+    }
+  }
+}
+/** the level of a part's exposed surface at a plan point, or null if no part
+ *  covers it. Takes the highest face over that offset, which is the one you
+ *  would stand on — a vertical face has two levels at the same offset. Pass a
+ *  pre-built run list when calling this per grid cell. */
+/** Is (x,y) inside the corner sector at the end of a run — the fan of ground
+ *  swept between this string's outward normal and the neighbouring string's?
+ *  Without this bound the wrap runs on down the next string and paints the part
+ *  over ground that string owns. */
+function inCornerSector(r,past,x,y){
+  const p=r.p, n=p.pts.length;
+  const Vc=past?r.B:r.A;
+  const nA=past?{x:r.nx,y:r.ny}:edgeNormalOut(p,(r.i-1+n)%n);
+  const nB=past?edgeNormalOut(p,r.j):{x:r.nx,y:r.ny};
+  const rot=nA.x*nB.y-nA.y*nB.x;
+  if(Math.abs(rot)<1e-9)return false;              // a straight run has no corner
+  const sg=Math.sign(rot);
+  let vx=x-Vc.x, vy=y-Vc.y;
+  const vl=Math.hypot(vx,vy); if(vl<1e-9)return true;
+  vx/=vl; vy/=vl;
+  const c1=(nA.x*vy-nA.y*vx)*sg, c2=(vx*nB.y-vy*nB.x)*sg;
+  return c1>=-1e-9&&c2>=-1e-9;
+}
+function partSurfaceAt(x,y,runs){
+  let best=null;
+  for(const r of (runs||partRuns())){
+    const D=partDaylight(r.a.part,r.a.side), sgn=Math.sign(D.dx||1);
+    const dx=x-r.A.x, dy=y-r.A.y;
+    const s=dx*r.ux+dy*r.uy;                        // along the string
+    let t, sAt=s;
+    if(s<r.a.s0-1e-6||s>r.a.s1+1e-6){
+      // Past the run's ends the part may still hold the corner, where its
+      // footprint wraps round the vertex. Measure the offset radially from that
+      // vertex instead of square to the string, so the section carries round.
+      const past=s>r.a.s1;
+      if(past?!(r.a.s1>=r.L-0.01):!(r.a.s0<=0.01))continue;
+      // only wrap where the part actually CARRIES ON round the corner. If it
+      // ends here the run stops at the string end and the neighbouring string's
+      // own batter takes the ground — wrapping anyway paints the part over it.
+      if(!(past?r.mEnd:r.mStart))continue;
+      if(!inCornerSector(r,past,x,y))continue;      // and only that corner's fan
+      const Vc=past?r.B:r.A;
+      t=Math.hypot(x-Vc.x,y-Vc.y)*sgn;
+      sAt=past?r.a.s1:r.a.s0;
+    }else{
+      t=dx*r.nx+dy*r.ny;                            // out from the string
+    }
+    const zs=r.A.z+(r.B.z-r.A.z)*(sAt/r.L);
+    for(let k=0;k<r.chain.length-1;k++){
+      const q0=r.chain[k], q1=r.chain[k+1];
+      const lo=Math.min(q0[0],q1[0]), hi=Math.max(q0[0],q1[0]);
+      if(t<lo-1e-9||t>hi+1e-9)continue;
+      const span=q1[0]-q0[0];
+      const yy=Math.abs(span)<1e-9?Math.max(q0[1],q1[1])
+              :q0[1]+(q1[1]-q0[1])*((t-q0[0])/span);
+      const z=zs+yy;
+      if(best===null||z>best)best=z;
+    }
+    // and the batter running on from the daylight point — otherwise the section
+    // drops straight off the kerb onto the grid's own batter, which starts at
+    // the pad edge and knows nothing about the part
+    const beyondDay=(D.dx>=0)?(t>D.dx):(t<D.dx);
+    if(beyondDay){
+      const W={x:r.A.x+r.ux*sAt, y:r.A.y+r.uy*sAt};
+      const V={x:W.x+r.nx*D.dx, y:W.y+r.ny*D.dx, z:zs+D.dy};
+      const ox=x-V.x, oy=y-V.y, ol=Math.hypot(ox,oy);
+      const dir=ol>1e-9?{x:ox/ol,y:oy/ol}:{x:r.nx*sgn,y:r.ny*sgn};
+      const tt=toeAlong(r.p,V,dir,partBat(r.p,r.j));
+      if(tt.d>1e-6&&ol<=tt.d){
+        const z=V.z+(tt.z-V.z)*(ol/tt.d);
+        if(best===null||z>best)best=z;
+      }
+    }
+  }
+  return best;
+}
+/** Does the part carry on through the corner at vertex vj, and if so, along
+ *  what line? Nothing extra is stored for this — a pad outline is a ring, so
+ *  the two strings meeting at a vertex are just index arithmetic, and the
+ *  attachment already says which part, which side and how far each runs.
+ *  Returns the bisector to place the section on, and how much to stretch the
+ *  offsets so the two faces meet exactly (1/cos of the half angle). */
+function cornerMitre(p,vj){
+  const n=p.pts.length;
+  const eIn=(vj-1+n)%n, eOut=vj;                 // arriving at vj, leaving vj
+  const inA=segPart(p,vj), outA=segPart(p,(vj+1)%n);
+  if(!inA||!outA)return null;                    // a part on both sides, or nothing to join
+  if(inA.part!==outA.part||inA.side!==outA.side)return null;   // same part, same side
+  const Lin=edgeLen(p,eIn), Lout=edgeLen(p,eOut);
+  const rIn=partRun(p,vj,Lin), rOut=partRun(p,(vj+1)%n,Lout);
+  if(!rIn||!rOut)return null;
+  if(rIn.s1<Lin-0.01||rOut.s0>0.01)return null;  // one of them stops short of the corner
+  const n1=edgeNormalOut(p,eIn), n2=edgeNormalOut(p,eOut);
+  let bx=n1.x+n2.x, by=n1.y+n2.y;
+  const bl=Math.hypot(bx,by); if(bl<1e-9)return null;   // a full reversal has no bisector
+  bx/=bl; by/=bl;
+  const cosH=n1.x*bx+n1.y*by;
+  if(cosH<1e-6)return null;
+  let k=1/cosH, bevel=false;
+  const LIMIT=3;                                 // past this a mitre spears out
+  if(k>LIMIT){k=LIMIT;bevel=true;}
+  // an inside corner can eat more room than the legs have; keep it inside them
+  const reach=partReach(inA.part)||0;
+  const room=Math.min(Lin,Lout)*0.5;
+  if(reach>1e-6&&reach*k>room)k=Math.max(1,room/reach);
+  return {dir:{x:bx,y:by}, k, bevel};
+}
 /** does the string ending at outline vertex i carry a retained-wall flag? */
 function edgeIsWall(p,i){
   if(!p.segBat)return false;
@@ -3161,6 +3783,17 @@ function edgeNormalOut(p,i){
   return {x:nx,y:ny};
 }
 /** how the string ENDING at vertex j is treated: wall, or cut/fill batters */
+/** the batter the PART daylights at. Kept apart from the string's own batter so
+ *  that trimming a part hands the uncovered length straight back to the pad —
+ *  the daylight slope belongs to the part, not to the whole string. Falls back
+ *  to the string override, then the pad. */
+function partBat(p,j){
+  const id=p.pts[j].id, o=(p.segBat&&id!=null)?p.segBat[id]:null;
+  const s=edgeBat(p,j);
+  return {wall:false,
+          bc:(o&&o.dayCut)||s.bc,
+          bf:(o&&o.dayFill)||s.bf};
+}
 function edgeBat(p,j){
   const id=p.pts[j].id, o=(p.segBat&&id!=null)?p.segBat[id]:null;
   return {wall:!!(o&&o.wall),
@@ -3273,6 +3906,13 @@ function finishedTIN(subgrade){
       const specIn=edgeBat(p,i), specOut=edgeBat(p,nx2);
       const tIn=toeAlong(p,p.pts[i],dirIn,specIn);
       const tOut=toeAlong(p,p.pts[i],dirOut,specOut);
+      // where a part covers the whole string, the part carries the ground out
+      // to its daylight point and raises the batter from there, so the string
+      // itself must not also throw a skirt underneath it
+      const covIn =partCoversAll(p,i,edgeLen(p,pv));
+      const covOut=partCoversAll(p,nx2,edgeLen(p,i));
+      if(covIn)tIn.d=0;
+      if(covOut)tOut.d=0;
       chain.push({v:i,toe:tIn});
 
       // a real corner: sweep the toe round from one edge normal to the other
@@ -3396,6 +4036,98 @@ function finishedTIN(subgrade){
     }
   }
 
+  // ── parts swept along their strings ─────────────────────────────────────
+  // The exposed chain is given in section coordinates (x out from the string,
+  // y up) running daylight-first, attach-last. Sweep it between the run's two
+  // ends and stitch the strips. Past the daylight point the ordinary batter
+  // carries on, started from there rather than from the string.
+  for(const p of S.pads){
+    if(p.isBoundary||p.pts.length<3||!p.segBat)continue;
+    const n=p.pts.length, cw=signedArea(p.pts)<0;
+    for(let i=0;i<n;i++){
+      const j=(i+1)%n, A=p.pts[i], B=p.pts[j];
+      const L=Math.hypot(B.x-A.x,B.y-A.y); if(L<1e-6)continue;
+      const a=partRun(p,j,L); if(!a)continue;
+      const ux=(B.x-A.x)/L, uy=(B.y-A.y)/L;
+      let nx2=uy, ny2=-ux; if(cw){nx2=-nx2;ny2=-ny2;}    // outward from the pad
+      const chain=partChain(a.part,a.side);
+      const at=s=>({x:A.x+ux*s, y:A.y+uy*s, z:A.z+(B.z-A.z)*(s/L)});
+      // where the part carries on round a corner, both runs place their end
+      // section on the shared bisector — identical coordinates, so they weld
+      // and the corner closes exactly instead of leaving a wedge
+      const m0=(a.s0<=0.005)?cornerMitre(p,i):null;
+      const m1=(a.s1>=L-0.005)?cornerMitre(p,j):null;
+      const secAt=(W,q,m)=> m
+        ? add(W.x+m.dir.x*q[0]*m.k, W.y+m.dir.y*q[0]*m.k, W.z+q[1], true)
+        : add(W.x+nx2*q[0], W.y+ny2*q[0], W.z+q[1], true);
+      const W0=at(a.s0), W1=at(a.s1);
+      const c0=chain.map(q=>secAt(W0,q,m0)), c1=chain.map(q=>secAt(W1,q,m1));
+      for(let k=0;k<chain.length-1;k++){            // one strip per section face
+        const p0=c0[k],p1=c0[k+1],q0=c1[k],q1=c1[k+1];
+        if(p0!==q0&&p1!==q1){faces.push([p0,p1,q1]);faces.push([p0,q1,q0]);}
+      }
+      // end caps where a trimmed part stops mid-string
+      if(a.s0>0.005) for(let k=1;k<chain.length-1;k++)faces.push([c0[0],c0[k],c0[k+1]]);
+      if(a.s1<L-0.005)for(let k=1;k<chain.length-1;k++)faces.push([c1[0],c1[k+1],c1[k]]);
+      // and the batter onward from the daylight edge
+      const D=partDaylight(a.part,a.side);
+      const spec=partBat(p,j), dir={x:nx2,y:ny2};
+      const fi=S.feats.indexOf(p);
+      const mine=(X,Y,Z)=>{
+        const cx3=(X.x+Y.x+Z.x)/3, cy3=(X.y+Y.y+Z.y)/3;
+        const ci=Math.round((cx3-C.x0)/C.cell), cj=Math.round((cy3-C.y0)/C.cell);
+        if(ci<0||cj<0||ci>=C.nx||cj>=C.ny)return true;
+        const w=C.pad[cj*C.nx+ci];
+        return w<0||w===fi;
+      };
+      const dlAt=(W,m)=> m
+        ? {x:W.x+m.dir.x*D.dx*m.k, y:W.y+m.dir.y*D.dx*m.k, z:W.z+D.dy}
+        : {x:W.x+nx2*D.dx, y:W.y+ny2*D.dx, z:W.z+D.dy};
+      const V0=dlAt(W0,m0), V1=dlAt(W1,m1);
+      const t0=toeAlong(p,V0,dir,spec), t1=toeAlong(p,V1,dir,spec);
+      if(t0.d>SNAP||t1.d>SNAP){
+        const b0=add(V0.x,V0.y,V0.z,true), b1=add(V1.x,V1.y,V1.z,true);
+        const e0=add(t0.x,t0.y,t0.z,false), e1=add(t1.x,t1.y,t1.z,false);
+        if(b0!==e0&&b1!==e1){
+          if(mine(pts[b0],pts[b1],pts[e1]))faces.push([b0,b1,e1]);
+          if(mine(pts[b0],pts[e1],pts[e0]))faces.push([b0,e1,e0]);
+        }
+      }
+      // At a mitred corner the daylight point is shared but the toe still leaves
+      // on each edge's own normal, so the batter opens a wedge — the same
+      // problem one step out from the part. Sweep the toe round the corner, the
+      // way the pad's own skirt already fans. Emitted once, from the arriving
+      // run, so the two sides cannot each lay their own copy.
+      if(m1){
+        const nA={x:nx2,y:ny2}, nB=edgeNormalOut(p,j);
+        const ang=Math.acos(Math.max(-1,Math.min(1,nA.x*nB.x+nA.y*nB.y)));
+        if(ang>0.05){
+          // the two runs may daylight at different slopes, so the fan eases from
+          // one to the other as it sweeps — sweeping at the arriving slope alone
+          // leaves the flatter side short
+          const spB=partBat(p,(j+1)%n);
+          const K=Math.min(8,Math.max(2,Math.round(ang/0.3)+1));
+          const apex=add(V1.x,V1.y,V1.z,true);
+          let prev=null;
+          for(let s=0;s<=K;s++){
+            const t=s/K;
+            let dx2=nA.x+(nB.x-nA.x)*t, dy2=nA.y+(nB.y-nA.y)*t;
+            const dl2=Math.hypot(dx2,dy2)||1; dx2/=dl2; dy2/=dl2;
+            const mix={wall:false,
+              bc:spec.bc+(spB.bc-spec.bc)*t,
+              bf:spec.bf+(spB.bf-spec.bf)*t};
+            const tt=toeAlong(p,V1,{x:dx2,y:dy2},mix);
+            const cur=tt.d>SNAP?add(tt.x,tt.y,tt.z,false):apex;
+            if(prev!=null&&prev!==cur&&cur!==apex&&prev!==apex){
+              if(mine(pts[apex],pts[prev],pts[cur]))faces.push([apex,prev,cur]);
+            }
+            prev=cur;
+          }
+        }
+      }
+    }
+  }
+
   if(!pts.length)return null;
   // Only ship points a face actually uses. Toes whose faces were dropped by the
   // ownership arbitration would otherwise ride along as loose points, and Civil
@@ -3505,7 +4237,7 @@ function saveProject(){
       gridSp:S.gridSp,snap:S.snap,linkW:S.linkW,vex:S.vex,
       showEgCont:S.showEgCont,showFgCont:S.showFgCont,showGrid:S.showGrid,
       padFill:S.padFill,showCF:S.showCF,cLabels:S.cLabels,units:S.units},
-    rates:S.rates,
+    rates:S.rates, parts:S.parts,
   };
   save(safe(S.egName)+'-job.json',JSON.stringify(d),'application/json');
   note('Job saved');
@@ -3550,6 +4282,7 @@ function loadProject(d){
   if(d.rates){S.rates=Object.assign(S.rates,d.rates);
     $('rCur').value=S.rates.cur;$('rFill').value=S.rates.fill;$('rWaste').value=S.rates.waste;
     $('rImport').value=S.rates.import;$('rWallU').value=S.rates.wallU;$('rWallO').value=S.rates.wallO;}
+  S.parts=(d.parts&&typeof d.parts==='object')?d.parts:{}; drawParts();
   S.units=(se.units==='ft')?'ft':'m'; relabelUnits();
   ['vCF','vFill','vFgC','vEgC','vGrid'].forEach((id,n)=>
     $(id).classList.toggle('on',[S.showCF,S.padFill,S.showFgCont,S.showEgCont,S.showGrid][n]));
@@ -3869,9 +4602,10 @@ function readSurvey(f){
     if(/\.json$/i.test(f.name)){
       try{
         const d=JSON.parse(r.result);
+        if(d.tool==='parts-solver'){addPart(d);return;}
         if(d.format!=='grading-solver-job')throw 0;
         loadProject(d);
-      }catch(x){note('That file is not a saved job',true);}
+      }catch(x){note('That file is not a saved job or a part',true);}
       return;
     }
     let got=null;
